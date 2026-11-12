@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>W플레이스 미디어월 · W PLACE MEDIA</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600&display=swap">
+<style>
+  :root{--bg:#0B0D1E;--card:#14172E;--line:#262A4A;--lime:#D4F53C;--pink:#ff5fa2;--text:#E9EBF5;--dim:#8D92B5}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font-family:Pretendard,system-ui,sans-serif;font-weight:500}
+  #app{display:grid;grid-template-columns:330px 1fr;height:100%}
+  #panel{background:var(--card);border-right:1px solid var(--line);overflow:auto;padding:18px 16px 60px}
+  h1{font-size:19px;margin:0 0 4px}
+  .sub{color:var(--dim);font-size:12.5px;margin-bottom:12px;line-height:1.55}
+  h2{font-size:13px;color:var(--lime);margin:20px 0 8px;letter-spacing:.02em}
+  .row{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-bottom:6px}
+  .row.two{grid-template-columns:repeat(2,1fr)}
+  label{display:block;font-size:11.5px;color:var(--dim)}
+  input,select{width:100%;margin-top:3px;background:#0B0D1E;border:1px solid var(--line);color:var(--text);border-radius:8px;padding:7px 8px;font:inherit;font-size:13.5px}
+  input:focus,select:focus{outline:1px solid var(--lime)}
+  input[type=color]{padding:2px;height:34px}
+  .note{font-size:12.5px;background:#0B0D1E;border:1px dashed var(--line);border-radius:8px;padding:8px 10px;margin:4px 0 8px;line-height:1.55}
+  .note b{color:var(--lime)}
+  .card{border:1px solid var(--line);border-left:3px solid var(--pink);border-radius:10px;padding:8px;margin-bottom:8px}
+  .card.pick{outline:2px solid var(--lime);outline-offset:3px}
+  .card .top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px}
+  button{font:inherit;cursor:pointer;border-radius:8px;border:1px solid var(--line);background:#0B0D1E;color:var(--text);padding:7px 11px;font-size:13px}
+  button:hover{border-color:var(--lime)}
+  button.on{background:var(--lime);color:#0B0D1E;border-color:var(--lime);font-weight:700}
+  button.x{padding:2px 8px;color:var(--dim)}
+  button.wide{width:100%}
+  .tpl{display:grid;gap:6px}.tpl button{text-align:left;line-height:1.4}.tpl small{display:block;color:var(--dim);font-size:11.5px;font-weight:500}
+  #main{position:relative;min-width:0;overflow:hidden}
+  #bar{position:absolute;top:12px;left:12px;right:12px;display:flex;gap:6px;flex-wrap:wrap;z-index:2}
+  #bar .sp{flex:1}
+  #view{position:absolute;inset:0}
+  canvas{display:block}
+  #chip{display:none;position:absolute;left:12px;top:56px;z-index:2;background:var(--lime);color:#0B0D1E;font-weight:700;font-size:13px;padding:5px 12px;border-radius:999px}
+  #vtitle{display:none;position:absolute;left:12px;bottom:46px;z-index:2;background:rgba(11,13,30,.82);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;max-width:70%;line-height:1.55}
+  #brand{display:none;position:fixed;left:0;right:0;bottom:0;height:34px;align-items:center;justify-content:center;gap:8px;background:#0B0D1E;border-top:1px solid var(--line);font-size:12.5px;color:var(--dim);z-index:5}
+  #brand b{font-family:Unbounded,sans-serif;color:var(--text)}#brand b i{color:var(--lime);font-style:normal}
+  body.viewer #app{grid-template-columns:1fr}body.viewer #panel{display:none}body.viewer #view{bottom:34px}
+  body.viewer #brand,body.viewer #vtitle{display:flex}body.viewer #vtitle{display:block}
+  #box{position:fixed;inset:0;background:rgba(5,6,15,.82);z-index:20;padding:20px;overflow:auto}
+  #box .in{max-width:620px;margin:8vh auto 0;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px}
+  #box .top{display:flex;justify-content:space-between;align-items:center}
+  @media(max-width:800px){#app{grid-template-columns:1fr;grid-template-rows:55% 45%}#main{order:-1}#panel{border-right:0;border-top:1px solid var(--line)}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="panel"></div>
+  <div id="main"><div id="bar"></div><div id="view"></div><div id="chip"></div><div id="vtitle"></div></div>
+</div>
+<div id="brand"><b><i>W</i> PLACE</b><span>W플레이스는 우리미디어의 전용 플랫폼입니다.</span></div>
+<meta name="robots" content="noindex,nofollow">
+<script>window.PLACE_PUBLIC=1</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+// ───────── W플레이스 미디어월 미리보기: 행사장 도면과 따로, 미디어 LED를 보여 줄 공간을 만들고 그 안에서 미디어월을 본다 ─────────
+const $=s=>document.querySelector(s),R=Math.random,r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100;
+const esc=t=>String(t??'').replace(/[&<>"]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+const SHARE_PAGE='https://novatixlab-lab.github.io/woori-place-view/media.html';   // 보기 전용 화면을 올려 둔 주소 (tools/build_public.py)
+const VIEW=location.hash.startsWith('#v=')||location.hash.startsWith('#s=')||!!window.PLACE_PUBLIC;
+const HPAY=location.hash.slice(3).split('&')[0],HOPT=new URLSearchParams(location.hash.split('&').slice(1).join('&'));
+
+// 공유 링크 (W플레이스와 같은 방식): 긴 링크 #v= 는 내용을 주소에, 짧은 링크 #s=번호.열쇠 는 암호화해 올리고 열쇠는 링크에만
+const b64u=u8=>{let t='';u8.forEach(b=>t+=String.fromCharCode(b));return btoa(t).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')};
+const unb64u=t=>Uint8Array.from(atob(t.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+const pipe=async(u8,ts)=>new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(ts)).arrayBuffer());
+async function packScene(o){const raw=new TextEncoder().encode(JSON.stringify(o));try{return 'z'+b64u(await pipe(raw,new CompressionStream('deflate-raw')))}catch(e){return 'j'+b64u(raw)}}
+async function unpackScene(t){const u8=unb64u(t.slice(1));return JSON.parse(new TextDecoder().decode(t[0]==='z'?await pipe(u8,new DecompressionStream('deflate-raw')):u8))}
+const aesKey=(raw,use)=>crypto.subtle.importKey('raw',raw,'AES-GCM',false,[use]);
+async function sealScene(o){const raw=new TextEncoder().encode(JSON.stringify(o));let body;try{body=await pipe(raw,new CompressionStream('deflate-raw'))}catch(e){return null}
+  const key=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12)),ct=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await aesKey(key,'encrypt'),body));
+  const all=new Uint8Array(12+ct.length);all.set(iv);all.set(ct,12);const A='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';
+  return {id:[...crypto.getRandomValues(new Uint8Array(8))].map(b=>A[b%A.length]).join(''),blob:b64u(all),key:b64u(key)}}
+async function openSealed(hash){const [id,k]=hash.split('.');if(!/^[A-Za-z0-9]{8}$/.test(id)||!k)throw 0;const r=await fetch('s/'+id+'.txt',{cache:'no-store'});if(!r.ok)throw r.status;
+  const all=unb64u((await r.text()).trim()),pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:all.slice(0,12)},await aesKey(unb64u(k),'decrypt'),all.slice(12));
+  return JSON.parse(new TextDecoder().decode(await pipe(new Uint8Array(pt),new DecompressionStream('deflate-raw'))))}
+
+// ───────── 상태 ─────────
+// 공간: 가운데가 0, 앞(관람객 쪽)이 +z, 뒤(벽면 미디어 쪽)가 −z. 면 하나 = {kind:'wall'|'ceil'|'floor', w,h(m), px,py, x,z, y(벽=하단 높이·천장=설치 높이·바닥=0), rot, bright, grid, mx,my, src, img, vimg, vid, name}
+const SPACES={booth:'전시 부스 (트러스 · 열린 공간)',room:'실내 미디어룸 (벽·천장으로 막힌 공간)',stage:'블랙박스 · 어두운 무대'};
+const FLOORS={grass:['인조잔디','#4f8a34'],carpet:['카펫','#3a3346'],wood:['우드','#a9794c'],concrete:['콘크리트','#8f8b83'],black:['블랙 무대','#16171c'],white:['화이트','#e8e6e1']};
+const MKIND={wall:'벽면 LED',ceil:'천장 LED',floor:'바닥 LED'};
+const MANIM=[['forest','숲 · 식물이 자라남'],['data','데이터 패널 · 빅데이터 입자'],['galaxy','은하수'],['wave','그라데이션 물결']];
+const DEF={name:'',when:{date:'',note:''},space:{type:'booth',w:12,d:6,h:4.2,floor:'grass',wallc:'#2a3238',plants:1,people:2,truss:1},surfaces:[]};
+const TPL={
+  forest:{n:'FOREST OF BIGDATA 부스',d:'12×6m 트러스 부스 · 벽면 12×3m + 천장 9×3.5m · 식재',s:{name:'FOREST OF BIGDATA',space:{type:'booth',w:12,d:6,h:4.2,floor:'grass',wallc:'#2a3238',plants:1,people:2,truss:1},
+    surfaces:[{kind:'wall',name:'벽면',w:12,h:3,px:3072,py:768,x:0,z:-2.7,y:.6,rot:0,bright:100,grid:1,mx:0,my:0,src:'data'},{kind:'ceil',name:'천장',w:9,h:3.5,px:2304,py:896,x:0,z:-.95,y:3.95,rot:0,bright:100,grid:1,mx:0,my:768,src:'forest'}]}},
+  room:{n:'몰입형 미디어룸',d:'12×8×4m 방 · 정면·양옆 벽 + 바닥 LED',s:{name:'몰입형 미디어룸',space:{type:'room',w:12,d:8,h:4,floor:'black',wallc:'#15161c',plants:0,people:3,truss:0},
+    surfaces:[{kind:'wall',name:'정면',w:12,h:4,px:3072,py:1024,x:0,z:-3.95,y:0,rot:0,bright:100,grid:0,mx:0,my:0,src:'galaxy'},
+      {kind:'wall',name:'왼쪽',w:8,h:4,px:2048,py:1024,x:-5.95,z:0,y:0,rot:90,bright:100,grid:0,mx:0,my:1024,src:'wave'},
+      {kind:'wall',name:'오른쪽',w:8,h:4,px:2048,py:1024,x:5.95,z:0,y:0,rot:-90,bright:100,grid:0,mx:2048,my:1024,src:'wave'},
+      {kind:'floor',name:'바닥',w:12,h:8,px:3072,py:2048,x:0,z:0,y:0,rot:0,bright:80,grid:0,mx:0,my:0,src:'galaxy'}]}},
+  single:{n:'벽면 한 장',d:'블랙 무대 · 벽면 LED 8×4.5m (16:9)',s:{name:'벽면 미디어월',space:{type:'stage',w:14,d:10,h:7,floor:'black',wallc:'#111217',plants:0,people:4,truss:1},
+    surfaces:[{kind:'wall',name:'메인',w:8,h:4.5,px:1920,py:1080,x:0,z:-4,y:.5,rot:0,bright:100,grid:1,mx:0,my:0,src:'wave'}]}}};
+let S=JSON.parse(JSON.stringify(DEF)),sceneName='',view='out',selTag='',msg='',SD=[];
+const fixState=o=>{const d=JSON.parse(JSON.stringify(DEF));o=o&&typeof o==='object'?o:{};return {name:o.name||'',when:Object.assign(d.when,o.when),space:Object.assign(d.space,o.space),
+  surfaces:(Array.isArray(o.surfaces)?o.surfaces:[]).filter(s=>s&&MKIND[s.kind])}};
+const serialize=lite=>{const o=JSON.parse(JSON.stringify(S));o.surfaces.forEach(s=>{delete s.vid;if(lite){delete s.img;delete s.vimg}});return o};
+const useTpl=k=>{S=fixState(JSON.parse(JSON.stringify(TPL[k].s)));view='out'};
+
+// ───────── 3D ─────────
+const el=$('#view');
+const renderer=new THREE.WebGLRenderer({antialias:true,preserveDrawingBuffer:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.outputEncoding=THREE.sRGBEncoding;renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.05;
+el.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+const camera=new THREE.PerspectiveCamera(50,1,.05,300);
+const controls=new THREE.OrbitControls(camera,renderer.domElement);controls.enableDamping=true;controls.maxPolarAngle=Math.PI*.95;controls.minDistance=.5;controls.maxDistance=60;
+const hemi=new THREE.HemisphereLight(0xeaf4ff,0x2a3a20,.75);scene.add(hemi);
+const sun=new THREE.DirectionalLight(0xffffff,.9);sun.position.set(9,15,12);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-16,right:16,top:16,bottom:-16});scene.add(sun);
+const M=(c,o={})=>new THREE.MeshStandardMaterial(Object.assign({color:new THREE.Color(c).convertSRGBToLinear(),roughness:.85},o));
+const dark=M(0x15191c,{roughness:.6}),white=M(0xf2f2ef,{roughness:.8});
+let dyn=new THREE.Group(),tmp=[];scene.add(dyn);
+function box(w,h,d,m,x,y,z,p=dyn,sh=true){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.position.set(x,y,z);o.castShadow=sh;o.receiveShadow=true;p.add(o);return o}
+function ctex(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t}
+const rp=(t,x,y)=>{const c=t.clone();c.needsUpdate=true;c.repeat.set(Math.max(1,x),Math.max(1,y));tmp.push(c);return c};
+const speck=(g,w,h,base,n,a)=>{g.fillStyle=base;g.fillRect(0,0,w,h);for(let i=0;i<n;i++){g.fillStyle=`rgba(${R()<.5?'0,0,0':'255,255,255'},${R()*a})`;g.fillRect(R()*w,R()*h,1.6,1.6)}};
+const FTEX={},floorTex=k=>FTEX[k]||(FTEX[k]=ctex(256,256,(g,w,h)=>{const c=(FLOORS[k]||FLOORS.concrete)[1];
+  if(k==='grass'){g.fillStyle=c;g.fillRect(0,0,w,h);for(let i=0;i<5000;i++){g.fillStyle=`hsl(${95+(R()-.5)*24},${45+R()*20}%,${28+R()*18}%)`;g.fillRect(R()*w,R()*h,1,3)}}
+  else if(k==='wood'){g.fillStyle=c;g.fillRect(0,0,w,h);for(let x=0;x<w;x+=32){g.fillStyle=`rgba(0,0,0,${.03+R()*.1})`;g.fillRect(x,0,32,h);g.fillStyle='rgba(40,20,5,.45)';g.fillRect(x,0,1.5,h)}}
+  else speck(g,w,h,c,k==='carpet'?9000:4000,k==='black'?.06:.1)}));
+const trussTex=ctex(64,256,(g,w,h)=>{g.clearRect(0,0,w,h);g.strokeStyle='#f4f6f7';g.lineWidth=7;g.strokeRect(3,0,w-6,h);g.lineWidth=4;g.beginPath();for(let y=0;y<h;y+=64){g.moveTo(4,y);g.lineTo(w-4,y+32);g.lineTo(4,y+64)}g.stroke()});
+function beam(a,b){const L=Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2]),gm=new THREE.BoxGeometry(.3,.3,L),uv=gm.attributes.uv,n=gm.attributes.normal;
+  for(let i=0;i<uv.count;i++)if(Math.abs(n.getZ(i))<.5&&Math.abs(n.getY(i))<=.5)uv.setXY(i,uv.getY(i),uv.getX(i));
+  const t=rp(trussTex,1,L/.3);const m=new THREE.Mesh(gm,new THREE.MeshStandardMaterial({map:t,alphaTest:.5,side:THREE.DoubleSide,metalness:.5,roughness:.35}));
+  m.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);m.lookAt(b[0],b[1],b[2]);m.castShadow=true;dyn.add(m)}
+const leafM=[0x2f6b25,0x3e8a2e,0x5a9e3a,0x76b043].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:1,flatShading:true})),blob=new THREE.IcosahedronGeometry(1,0);
+const leaf=(x,y,z,s)=>{const m=new THREE.Mesh(blob,leafM[Math.floor(R()*4)]);m.scale.setScalar(s);m.position.set(x,y,z);m.rotation.set(R()*3,R()*3,0);m.castShadow=true;dyn.add(m)};
+function person(x,z,ry){const g=new THREE.Group(),m=M(0xdadada);const b=new THREE.Mesh(new THREE.CylinderGeometry(.19,.16,1.3,12),m);b.position.y=.75;g.add(b);
+  const hd=new THREE.Mesh(new THREE.SphereGeometry(.12,12,10),M(0xd9b08c));hd.position.y=1.55;g.add(hd);g.position.set(x,0,z);g.rotation.y=ry;g.traverse(o=>o.castShadow=true);dyn.add(g)}
+function label(text,x,y,z,s=.6){const c=document.createElement('canvas');c.width=640;c.height=96;const g=c.getContext('2d');g.fillStyle='rgba(11,13,30,.88)';g.beginPath();g.roundRect(2,2,636,92,24);g.fill();
+  g.strokeStyle='#ff5fa2';g.lineWidth=3;g.stroke();g.fillStyle='#ff5fa2';g.font='600 40px Pretendard,sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText(text,320,50);
+  const t=new THREE.CanvasTexture(c);tmp.push(t);const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,toneMapped:false}));sp.scale.set(3.4*s,.51*s,1);sp.position.set(x,y,z);sp.renderOrder=9;sp.userData.lbl=1;dyn.add(sp)}
+
+// 내장 애니메이션 (W플레이스 도면 쪽에서 쓰던 것과 같은 그림)
+const MDRAW={
+  forest(g,W,H,t,st){if(!st.p){const n=Math.max(8,Math.round(W/34));st.p=[...Array(n)].map((_,k)=>({x:(k+.5+(R()-.5)*.8)*W/n,hm:H*(.35+R()*.6),off:R(),sp:.05+R()*.05,lean:(R()-.5)*.5,hue:90+R()*60,wd:1.5+R()*2.5}));st.f=[...Array(70)].map(()=>({x:R()*W,y:R()*H,a:R()*7,s:.3+R()}))}
+    const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#020a10');gr.addColorStop(.6,'#03261a');gr.addColorStop(1,'#0a4a2a');g.fillStyle=gr;g.fillRect(0,0,W,H);
+    g.globalCompositeOperation='lighter';g.strokeStyle='rgba(120,255,200,.07)';g.lineWidth=1;for(let y=(t*20)%40;y<H;y+=40){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
+    for(const p of st.p){const ph=(t*p.sp+p.off)%1,gro=Math.min(1,ph/.7),fade=ph>.9?1-(ph-.9)/.1:1,L=p.hm*(1-Math.pow(1-gro,3)),sw=Math.sin(t*.8+p.off*9)*6,ex=p.x+p.lean*L+sw,ey=H-L,cx=p.x+p.lean*L*.3,cy=H-L*.5;
+      g.strokeStyle=`hsla(${p.hue},70%,45%,${.8*fade})`;g.lineWidth=p.wd;g.beginPath();g.moveTo(p.x,H);g.quadraticCurveTo(cx,cy,ex,ey);g.stroke();
+      const nl=Math.floor(L/22);for(let j=1;j<=nl;j++){const u=j/(nl+1),bx=(1-u)*(1-u)*p.x+2*(1-u)*u*cx+u*u*ex,by=(1-u)*(1-u)*H+2*(1-u)*u*cy+u*u*ey,sd=j%2?1:-1,ls=(6+p.wd*2)*Math.min(1,nl-j+1);
+        g.fillStyle=`hsla(${p.hue+j*3},80%,${45+u*20}%,${.55*fade})`;g.beginPath();g.ellipse(bx+sd*ls*.8,by-ls*.2,ls,ls*.38,sd*.6,0,7);g.fill()}
+      if(gro>=1){const fl=Math.min(1,(ph-.7)/.08)*fade;g.fillStyle=`rgba(255,95,162,${.7*fl})`;g.beginPath();g.arc(ex,ey,4+p.wd*1.5,0,7);g.fill();g.fillStyle=`rgba(212,245,60,${.6*fl})`;g.beginPath();g.arc(ex,ey,2,0,7);g.fill()}}
+    for(const f of st.f){const x=((f.x+Math.sin(t*f.s+f.a)*30)%W+W)%W,y=((f.y-t*8*f.s)%H+H)%H,al=Math.max(0,.4+.6*Math.sin(t*3*f.s+f.a));g.fillStyle=`rgba(212,245,60,${al*.8})`;g.fillRect(x,y,2.5,2.5)}
+    g.globalCompositeOperation='source-over'},
+  data(g,W,H,t,st){if(!st.c){st.cols=Math.max(3,Math.round(W/180));st.rows=Math.max(2,Math.round(H/150));st.c=[...Array(st.cols*st.rows)].map(()=>({k:Math.floor(R()*3),ph:R()*7,v:Math.floor(R()*90000)}));st.q=[...Array(260)].map(()=>({x:R()*W,y:R()*H,v:30+R()*120,c:R()}))}
+    g.fillStyle='#050816';g.fillRect(0,0,W,H);const cw=W/st.cols,ch=H/st.rows,pd=Math.min(cw,ch)*.08;
+    st.c.forEach((c,n)=>{const x=(n%st.cols)*cw+pd,y=Math.floor(n/st.cols)*ch+pd,w=cw-pd*2,h=ch-pd*2,col=['#D4F53C','#4fc3ff','#ff5fa2'][(n+c.k)%3];
+      g.fillStyle='rgba(20,23,46,.9)';g.fillRect(x,y,w,h);g.globalAlpha=.5;g.strokeStyle=col;g.lineWidth=1.5;g.strokeRect(x,y,w,h);g.globalAlpha=1;
+      g.fillStyle=col;g.font=`600 ${Math.max(10,Math.round(h*.15))}px Unbounded,Pretendard,sans-serif`;g.textBaseline='top';g.fillText(String(Math.floor(c.v+t*137*(1+c.k))%1000000).padStart(6,'0'),x+w*.06,y+h*.07);
+      if(c.k===0){for(let b=0;b<10;b++){const bh=h*.55*(.25+.75*Math.abs(Math.sin(t*1.3+b*.7+c.ph)));g.fillRect(x+w*.06+b*w*.088,y+h*.92-bh,w*.06,bh)}}
+      else if(c.k===1){g.beginPath();for(let k=0;k<=40;k++){const px=x+w*.06+k*w*.88/40,py=y+h*.62+Math.sin(t*2+k*.45+c.ph)*h*.2*Math.sin(k*.2+t*.3);k?g.lineTo(px,py):g.moveTo(px,py)}g.lineWidth=2;g.strokeStyle=col;g.stroke()}
+      else{const r=Math.min(w,h)*.24,cx=x+w*.5,cy=y+h*.6,a=(Math.sin(t*.7+c.ph)*.5+.5)*Math.PI*2;g.lineWidth=r*.28;g.strokeStyle='rgba(255,255,255,.1)';g.beginPath();g.arc(cx,cy,r,0,7);g.stroke();g.strokeStyle=col;g.beginPath();g.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+a);g.stroke()}});
+    g.globalCompositeOperation='lighter';
+    st.q.forEach(p=>{const x=(p.x+t*p.v)%W,col=p.c<.5?'79,195,255':p.c<.8?'212,245,60':'255,95,162';g.fillStyle=`rgba(${col},.22)`;g.fillRect(x-36,p.y,36,1.5);g.fillStyle=`rgba(${col},.95)`;g.fillRect(x-2,p.y-1,3,3)});
+    g.globalCompositeOperation='source-over'},
+  galaxy(g,W,H,t,st){if(!st.s){st.s=[...Array(420)].map(()=>[R()*W,R()*H,R()*1.6+.4,R()*7]);st.p=[...Array(1600)].map(()=>{const arm=Math.floor(R()*3),r=Math.pow(R(),.7);return {r,a:arm*2.094+r*4.5+(R()-.5)*.7*(1.2-r),c:R()}})}
+    g.fillStyle='#02030a';g.fillRect(0,0,W,H);const cx=W/2,cy=H/2,rx=W*.48,ry=H*.62;g.globalCompositeOperation='lighter';
+    [['120,60,255',0],['255,60,160',2.1],['60,200,255',4.2]].forEach(([c,o])=>{const x=cx+Math.cos(t*.05+o)*W*.25,y=cy+Math.sin(t*.07+o)*H*.25,rr=Math.max(W,H)*.35,gr=g.createRadialGradient(x,y,0,x,y,rr);gr.addColorStop(0,`rgba(${c},.2)`);gr.addColorStop(1,`rgba(${c},0)`);g.fillStyle=gr;g.fillRect(0,0,W,H)});
+    st.s.forEach(s=>{g.fillStyle=`rgba(255,255,255,${.35+.35*Math.sin(t*2+s[3])})`;g.fillRect(s[0],s[1],s[2],s[2])});
+    st.p.forEach(p=>{const a=p.a+t*.12/(p.r+.15),x=cx+Math.cos(a)*p.r*rx,y=cy+Math.sin(a)*p.r*ry,z=p.r<.2?2.4:1.6;g.fillStyle=p.r<.15?'rgba(255,240,200,.9)':p.c<.6?'rgba(170,190,255,.7)':p.c<.85?'rgba(255,120,200,.6)':'rgba(212,245,60,.6)';g.fillRect(x,y,z,z)});
+    const cg=g.createRadialGradient(cx,cy,0,cx,cy,H*.35);cg.addColorStop(0,'rgba(255,245,220,.55)');cg.addColorStop(1,'rgba(255,245,220,0)');g.fillStyle=cg;g.fillRect(0,0,W,H);g.globalCompositeOperation='source-over'},
+  wave(g,W,H,t){const gr=g.createLinearGradient(0,0,W,H),s=(Math.sin(t*.3)+1)/2;gr.addColorStop(0,'#0B0D1E');gr.addColorStop(.5,`hsl(${300+s*30},60%,16%)`);gr.addColorStop(1,'#0B0D1E');g.fillStyle=gr;g.fillRect(0,0,W,H);
+    g.globalCompositeOperation='lighter';['255,46,160','220,60,255','120,90,255','80,200,255','212,245,60'].forEach((c,k)=>{g.beginPath();g.moveTo(0,H);for(let x=0;x<=W+1;x+=W/80){g.lineTo(x,H*(.25+.12*k)+Math.sin(x/W*Math.PI*(2+k*.6)+t*(.6+k*.15))*H*.13+Math.sin(x/W*9+t*1.3+k)*H*.03)}g.lineTo(W,H);g.closePath();
+      const gg=g.createLinearGradient(0,0,0,H);gg.addColorStop(0,`rgba(${c},0)`);gg.addColorStop(.5,`rgba(${c},.35)`);gg.addColorStop(1,`rgba(${c},.05)`);g.fillStyle=gg;g.fill()});g.globalCompositeOperation='source-over'}};
+
+// 면에 붙일 그림: 올린 영상 → 올린 이미지(영상 첫 장면) → 내장 애니메이션
+const LIVE=new Map(),IMGT=new Map(),VIDS={};let MUSED=new Set();
+function mediaTex(s,i){if(s.src==='video'&&VIDS[s.vid])return VIDS[s.vid].tex;
+  const im=s.src==='img'?s.img:s.src==='video'?s.vimg:null;
+  if(im){let t=IMGT.get(im);if(!t){const e=new Image();t=new THREE.Texture(e);t.encoding=THREE.sRGBEncoding;t.minFilter=THREE.LinearFilter;e.onload=()=>{t.needsUpdate=true};e.src=im;IMGT.set(im,t)}MUSED.add(im);return t}
+  const an=MDRAW[s.src]?s.src:'wave',px=Math.max(64,+s.px||1024),py=Math.max(32,+s.py||512),cw=Math.min(1024,Math.round(px)),ch=Math.max(32,Math.min(1024,Math.round(cw*py/px))),k=i+'|'+an+'|'+cw+'|'+ch;
+  let L=LIVE.get(k);if(!L){const c=document.createElement('canvas');c.width=cw;c.height=ch;const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.minFilter=THREE.LinearFilter;L={c,g:c.getContext('2d'),t,an,st:{}};LIVE.set(k,L);MDRAW[an](L.g,cw,ch,performance.now()/1000,L.st)}
+  MUSED.add(k);return L.t}
+function mediaTick(){if(!LIVE.size)return;const t=performance.now()/1000;for(const L of LIVE.values()){MDRAW[L.an](L.g,L.c.width,L.c.height,t,L.st);L.t.needsUpdate=true}}
+const HITM=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});
+
+function build(){
+  dyn.traverse(o=>{if(o.geometry&&o.geometry!==blob)o.geometry.dispose()});tmp.forEach(t=>t.dispose());tmp=[];scene.remove(dyn);dyn=new THREE.Group();scene.add(dyn);MUSED=new Set();
+  const P=S.space,W=Math.max(2,+P.w||10),D=Math.max(2,+P.d||6),H=Math.max(2,+P.h||4),T=P.type,dk=T!=='booth';
+  scene.background=new THREE.Color(dk?0x07080d:0x1b2329);scene.fog=dk?null:new THREE.Fog(0x1b2329,40,90);
+  hemi.intensity=T==='booth'?.75:T==='room'?.32:.18;sun.intensity=T==='booth'?.9:.12;
+  // 바닥: 주변 전시장 + 이 공간 바닥재
+  const hall=new THREE.Mesh(new THREE.PlaneGeometry(90,90),M(dk?0x0d0e12:0x2a3238,{roughness:.9}));hall.rotation.x=-Math.PI/2;hall.receiveShadow=true;dyn.add(hall);
+  const fl=new THREE.Mesh(new THREE.BoxGeometry(W,.1,D),new THREE.MeshStandardMaterial({map:rp(floorTex(P.floor),W/2,D/2),roughness:P.floor==='black'?.5:1}));fl.position.y=.05;fl.receiveShadow=true;dyn.add(fl);
+  if(T==='room'){const wm=M(P.wallc||'#15161c',{roughness:.9})/* 안쪽 면만 그려서 밖에서는 벽 너머로 안이 보이게 */,pl=(w,h,x,y,z,ry)=>{const o=new THREE.Mesh(new THREE.PlaneGeometry(w,h),wm);o.position.set(x,y,z);o.rotation.y=ry;o.receiveShadow=true;dyn.add(o);return o};
+    pl(W,H,0,H/2,-D/2,0);pl(D,H,-W/2,H/2,0,Math.PI/2);pl(D,H,W/2,H/2,0,-Math.PI/2);const cl=pl(W,D,0,H,0,0);cl.rotation.x=Math.PI/2;cl.userData.ceil=1}
+  if(+P.truss){const TH=H,BX=[];for(let k=0;k<=Math.max(2,Math.round(W/3));k++)BX.push(-W/2+k*W/Math.max(2,Math.round(W/3)));
+    for(const x of [-W/2,W/2])beam([x,0,-D/2],[x,TH,-D/2]);if(T!=='booth')for(const x of [-W/2,W/2])beam([x,0,D/2],[x,TH,D/2]);else for(const x of BX)beam([x,0,-D/2],[x,TH,-D/2]);
+    beam([-W/2,TH,-D/2],[W/2,TH,-D/2]);beam([-W/2,TH,D/2],[W/2,TH,D/2]);for(const x of BX)beam([x,TH,-D/2],[x,TH,D/2]);beam([-W/2,TH,0],[W/2,TH,0])}
+  if(+P.plants){for(let x=-W/2;x<=W/2;x+=.4){leaf(x,H+.1+R()*.2,D/2+(R()-.5)*.3,.18+R()*.12);leaf(x,H+.1+R()*.2,-D/2+(R()-.5)*.3,.15+R()*.1)}
+    for(const x of[-W/2,W/2])for(let z=-D/2;z<=D/2;z+=.4)leaf(x+(R()-.5)*.3,H+.1+R()*.2,z,.16+R()*.12);
+    for(let i=0;i<46;i++){const z=R()<.55?D/2-R()*.5:-D/2+.4+R()*.5,x=(R()-.5)*(W-.6);if(z>0&&Math.abs(x)<W*.3)continue;leaf(x,.25,z,.2+R()*.18)}
+    for(const [fx,fz,s] of [[-.43,-.37,.9],[.38,-.37,1],[.45,-.1,1.1],[.42,.3,.9],[-.12,.43,.6]]){const x=fx*W,z=fz*D,tr=new THREE.Mesh(new THREE.CylinderGeometry(.05*s,.09*s,1.6*s,6),M(0x5b4130));tr.position.set(x,.1+.8*s,z);tr.castShadow=true;dyn.add(tr);for(let k=0;k<6;k++)leaf(x+(R()-.5)*.8*s,.1+(1.6+R()*.9)*s,z+(R()-.5)*.8*s,(.3+R()*.2)*s)}}
+  for(let k=0;k<Math.min(12,Math.max(0,Math.round(+P.people||0)));k++){const sd=k%2?1:-1,row=Math.floor(k/2);person(sd*W*(.28+row*.05),D*(.05+row*.12),Math.PI+sd*.25)}   // 사람은 양옆에 세워 화면을 가리지 않게
+  // 미디어 면
+  S.surfaces.forEach((s,i)=>{const Wm=Math.max(.25,+s.w||1),Hm=Math.max(.25,+s.h||1),k=s.kind,y0=+s.y||0,cy=k==='wall'?y0+Hm/2:k==='floor'?Math.max(.11,y0+.11):y0,br=Math.max(5,Math.min(100,+s.bright||100))/100;
+    const g=new THREE.Group();g.position.set(+s.x||0,cy,+s.z||0);g.rotation.y=-(+s.rot||0)*Math.PI/180;g.userData.sel='media:'+i;dyn.add(g);
+    const mt=new THREE.MeshBasicMaterial({map:mediaTex(s,i),toneMapped:false});mt.color.setScalar(br);const scr=new THREE.Mesh(new THREE.PlaneGeometry(Wm,Hm),mt);
+    if(k==='ceil')scr.rotation.x=Math.PI/2;if(k==='floor')scr.rotation.x=-Math.PI/2;g.add(scr);
+    if(k==='ceil')box(Wm+.06,.1,Hm+.06,dark,0,.052,0,g,false);else if(k==='floor')box(Wm+.06,.1,Hm+.06,dark,0,-.052,0,g,false);else box(Wm+.06,Hm+.06,.12,dark,0,0,-.062,g,false);
+    if(+s.grid){const Q=[],nx=Math.max(1,Math.round(Wm/.5)),ny=Math.max(1,Math.round(Hm/.5));for(let a=1;a<nx;a++){const u=-Wm/2+a*Wm/nx;Q.push(u,-Hm/2,0,u,Hm/2,0)}for(let a=1;a<ny;a++){const v=-Hm/2+a*Hm/ny;Q.push(-Wm/2,v,0,Wm/2,v,0)}
+      const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(Q,3));const ln=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x000000,transparent:true,opacity:.4}));
+      if(k==='ceil'){ln.rotation.x=Math.PI/2;ln.position.y=-.004}else if(k==='floor'){ln.rotation.x=-Math.PI/2;ln.position.y=.004}else ln.position.z=.004;g.add(ln)}
+    if(k==='wall'&&y0>.05)for(const ax of[-1,1])box(.08,y0,.3,dark,ax*Wm*.42,-Hm/2-y0/2,-.15,g,false);
+    if(k==='ceil'&&H-cy>.15&&T==='room')for(const ax of[-1,1])for(const az of[-1,1])box(.012,H-cy,.012,dark,ax*Wm*.42,(H-cy)/2,az*Hm*.42,g,false);
+    const hb=new THREE.Mesh(new THREE.BoxGeometry(Wm,k==='wall'?Hm:.3,k==='wall'?.3:Hm),HITM);hb.userData.hit=1;g.add(hb);
+    const gl=new THREE.PointLight(0x9a8cff,(dk?.9:.5)*br,Math.max(6,Wm*1.2));gl.position.set(0,k==='ceil'?-1:k==='floor'?1:0,k==='wall'?1.4:0);g.add(gl);
+    if(!VIEW)label(`${MKIND[k]} ${i+1}${s.name?' · '+s.name:''} · ${Wm}×${Hm}m`,+s.x||0,k==='wall'?y0+Hm+.4:cy+(k==='ceil'?.5:.4),+s.z||0)});
+  for(const [k] of LIVE)if(!MUSED.has(k)){LIVE.get(k).t.dispose();LIVE.delete(k)}for(const [k,t] of IMGT)if(!MUSED.has(k)){t.dispose();IMGT.delete(k)}
+  if(!VIEW){clearTimeout(build._ls);build._ls=setTimeout(()=>{try{localStorage.setItem('place-media-current',JSON.stringify({name:sceneName,s:serialize()}))}catch(e){}},400)}
+  applyView(true);
+}
+
+// ───────── 보는 자리 ─────────
+const VIEWS=[['out','전경'],['front','미디어월 정면'],['eye','관람객 눈높이'],['up','천장 올려보기'],['top','위에서']];
+let anim=null;
+function viewPos(v){const P=S.space,W=+P.w||10,D=+P.d||6,H=+P.h||4,asp=el.clientWidth/Math.max(1,el.clientHeight),ws=S.surfaces.filter(s=>s.kind==='wall').sort((a,b)=>b.w*b.h-a.w*a.h)[0],cs=S.surfaces.find(s=>s.kind==='ceil');
+  if(v==='front'&&ws){const th=-(+ws.rot||0)*Math.PI/180,nx=Math.sin(th),nz=Math.cos(th),dist=Math.max(4,(+ws.w||6)*.85/Math.max(.8,Math.min(asp,2))+1.5),wy=(+ws.y||0)+(+ws.h||3)/2;
+    return {p:[(+ws.x||0)+nx*dist,Math.max(1.6,wy),(+ws.z||0)+nz*dist],t:[+ws.x||0,cs?(wy+(+cs.y||H))/2:wy,+ws.z||0],fov:asp<1.2?70:52}}
+  if(v==='eye'){const tz=ws?+ws.z||0:-D/2;return {p:[0,1.6,Math.min(D/2-.3,tz+Math.max(3,D*.6))],t:[0,ws?(+ws.y||0)+(+ws.h||3)*.55:H*.5,tz],fov:asp<1.2?78:64}}
+  if(v==='up'){const c=cs||{x:0,z:0,y:H};return {p:[(+c.x||0),1.6,(+c.z||0)+Math.max(1.2,(+c.h||3)*.45)],t:[+c.x||0,+c.y||H,(+c.z||0)-(+c.h||3)*.2],fov:asp<1.2?85:70}}
+  if(v==='top')return {p:[0,Math.max(D,W/asp)*1.35,.01],t:[0,0,0],fov:45};
+  return {p:[-W*1.15,H*1.8,D*1.9],t:[0,H*.4,-D*.1],fov:50}}
+function applyView(keep){const v=viewPos(view);camera.aspect=el.clientWidth/Math.max(1,el.clientHeight);camera.fov=v.fov;camera.updateProjectionMatrix();
+  dyn.traverse(o=>{if(o.userData.ceil)o.visible=view!=='top'&&view!=='out'});
+  if(keep)return;const to={p:new THREE.Vector3(...v.p),t:new THREE.Vector3(...v.t)};
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches||!anim&&camera.position.lengthSq()===0){camera.position.copy(to.p);controls.target.copy(to.t);return}
+  anim={from:{p:camera.position.clone(),t:controls.target.clone()},to,s:performance.now()}}
+function bar(){$('#bar').innerHTML=VIEWS.map(([k,n])=>`<button data-v="${k}" class="${view===k?'on':''}">${n}</button>`).join('')+`<button id="spin" class="${controls.autoRotate?'on':''}">자동 회전</button><span class="sp"></span>`+
+  (VIEW?'':`<a href="./" target="_blank" rel="noopener"><button>W플레이스 도면</button></a><button id="share">공유하기</button>`)+`<button id="snap">이미지 저장</button>`}
+
+// ───────── 왼쪽 설정 칸 ─────────
+const get=p=>p.split('.').reduce((o,k)=>o==null?o:o[k],S),set=(p,v)=>{const k=p.split('.'),l=k.pop();k.reduce((o,x)=>o[x],S)[l]=v};
+const num=(p,l,st=.5)=>`<label>${l}<input type="number" step="${st}" data-p="${p}" value="${esc(get(p)??0)}"></label>`;
+const sel=(p,l,opts)=>`<label>${l}<select data-p="${p}" data-str>${opts.map(([v,n])=>`<option value="${v}" ${String(get(p))===String(v)?'selected':''}>${n}</option>`).join('')}</select></label>`;
+function panel(){if(VIEW)return;const P=S.space,M2=S.surfaces;
+  $('#panel').innerHTML=`<h1><span style="font-family:Unbounded,sans-serif"><span style="color:var(--lime)">W</span> PLACE</span> <span style="font-size:14px">미디어월</span></h1>
+  <div class="sub">행사장 도면과 따로, 미디어 LED를 보여 줄 공간을 만들어 미디어월을 미리 봅니다. 숫자를 바꾸면 바로 바뀝니다.</div>
+  <h2>저장</h2>
+  <div class="row two"><label>이름<input data-p="name" data-str value="${esc(S.name)}" placeholder="예: OO 부스 미디어월"></label><label>행사 날짜<input type="date" data-p="when.date" data-str value="${esc(S.when.date)}"></label></div>
+  <div class="row two"><button id="save">저장</button><button id="fresh">새로 시작</button></div>
+  ${SD===null?'<div class="note">저장 서버가 꺼져 있어 저장·불러오기를 쓸 수 없습니다.</div>':`<label>저장된 미디어월 (${SD.length}건)<select id="load"><option value="">불러오기</option>${SD.map(x=>`<option value="${esc(x.name)}" ${x.name===sceneName?'selected':''}>${esc(x.name)}${x.date?' · '+esc(x.date):''}</option>`).join('')}</select></label>`}
+  <div class="sub" id="msg" style="margin:6px 0 0;color:var(--lime)">${esc(msg)}</div>
+  <h2>공간 만들기</h2>
+  <div class="tpl">${Object.entries(TPL).map(([k,t])=>`<button data-tpl="${k}">${esc(t.n)}<small>${esc(t.d)}</small></button>`).join('')}</div>
+  <div style="height:8px"></div>
+  ${sel('space.type','공간 종류',Object.entries(SPACES))}
+  <div class="row" style="margin-top:6px">${num('space.w','가로 m')}${num('space.d','깊이 m')}${num('space.h','높이 m',.1)}</div>
+  <div class="row two">${sel('space.floor','바닥',Object.entries(FLOORS).map(([k,v])=>[k,v[0]]))}${P.type==='room'?`<label>벽 색<input type="color" data-p="space.wallc" data-str value="${esc(P.wallc)}"></label>`:'<span></span>'}</div>
+  <div class="row">${sel('space.truss','트러스 프레임',[[1,'있음'],[0,'없음']])}${sel('space.plants','식재 · 나무',[[1,'있음'],[0,'없음']])}${num('space.people','사람(크기 참고)',1)}</div>
+  <h2>미디어 면</h2>
+  <div class="row"><button data-add="wall">+ 벽면</button><button data-add="ceil">+ 천장</button><button data-add="floor">+ 바닥</button></div>
+  ${M2.length?`<button class="wide" id="mapbtn">4K 픽셀맵 한 장 올려 면마다 나누기</button><div class="sub" style="margin:4px 0 8px">3840×2160 한 장에서 면마다 적힌 「픽셀맵 위치」부터 그 면 해상도만큼 잘라 씁니다.</div>`:''}
+  <input type="file" id="mfile" hidden><input type="file" id="mapfile" accept="image/*" hidden>
+  ${M2.map((s,i)=>{const o=k=>`surfaces.${i}.${k}`,dx=Math.round((+s.px||0)/(+s.w||1)),dy=Math.round((+s.py||0)/(+s.h||1)),k=s.kind;
+    return `<div class="card ${selTag==='media:'+i?'pick':''}" data-sec="media:${i}"><div class="top"><b>${MKIND[k]} ${i+1}${s.name?' · '+esc(s.name):''}</b><button class="x" data-del="${i}">빼기</button></div>
+    <div class="row two">${sel(o('kind'),'종류',Object.entries(MKIND))}<label>이름<input data-p="${o('name')}" data-str value="${esc(s.name||'')}"></label></div>
+    <div class="row">${num(o('w'),'가로 m')}${num(o('h'),k==='wall'?'세로(높이) m':'세로(깊이) m')}${num(o('bright'),'밝기 %',10)}</div>
+    <div class="row">${num(o('px'),'해상도 가로 px',64)}${num(o('py'),'해상도 세로 px',64)}${sel(o('grid'),'캐비닛 격자',[[0,'안 보임'],[1,'0.5m 격자']])}</div>
+    <div class="row">${num(o('x'),'좌우 m')}${num(o('z'),'앞뒤 m (뒤 −)')}${k==='floor'?num(o('rot'),'회전 °',15):num(o('y'),k==='ceil'?'설치 높이 m':'하단 높이 m',.1)}</div>
+    ${k==='floor'?'':`<div class="row two">${num(o('rot'),'회전 °',15)}<span></span></div>`}
+    <label>띄울 콘텐츠<select data-p="${o('src')}" data-str>${MANIM.map(([v,n])=>`<option value="${v}" ${s.src===v?'selected':''}>${n}</option>`).join('')}${s.img?`<option value="img" ${s.src==='img'?'selected':''}>올린 이미지</option>`:''}${s.vimg?`<option value="video" ${s.src==='video'?'selected':''}>올린 영상</option>`:''}</select></label>
+    <div class="row two" style="margin-top:6px"><button data-up="img,${i}">이미지 올리기</button><button data-up="vid,${i}">영상 올리기</button></div>
+    <div class="row two">${num(o('mx'),'픽셀맵 위치 x px',64)}${num(o('my'),'픽셀맵 위치 y px',64)}</div>
+    <div class="note" style="margin:0">1m당 가로 ${dx}px · 세로 ${dy}px${Math.abs(dx-dy)>2?' <span style="color:#ffb347">(가로·세로 밀도가 달라 그림이 늘어나 보일 수 있음)</span>':''}${+s.grid?` · 500×500 캐비닛 약 ${Math.round((+s.w||0)/.5)*Math.round((+s.h||0)/.5)}장`:''}${s.src==='video'?'<br><span style="color:#ffb347">영상은 이 PC에서만 재생됩니다. 공유 링크에는 첫 장면 사진이 들어갑니다.</span>'+(VIDS[s.vid]?'':'<br><span style="color:#ff6b6b">다시 열어서 영상 파일이 빠졌습니다 — 첫 장면만 보입니다.</span>'):''}</div></div>`}).join('')||'<div class="note">위 「공간 만들기」에서 하나를 고르거나 면을 추가하세요.</div>'}
+  <div class="sub" style="margin-top:10px">화면에서 면을 눌러 고른 뒤 끌거나 방향키(10cm, Shift 50cm, ⌥ 1cm)로 옮깁니다.</div>`;
+  bar()}
+const say=t=>{msg=t;const e=$('#msg');if(e)e.textContent=t};
+function newSurface(kind){const P=S.space,W=+P.w||10,D=+P.d||6,H=+P.h||4;
+  const s=kind==='wall'?{kind,w:Math.min(W,8),h:Math.min(H-.5,3),y:Math.min(.5,H*.1),x:0,z:r2(-D/2+.2),src:'wave'}:kind==='ceil'?{kind,w:Math.min(W-1,8),h:Math.min(D-1,3),y:r2(H-.25),x:0,z:0,src:'galaxy'}:{kind,w:Math.min(W,8),h:Math.min(D,4),y:0,x:0,z:0,src:'wave'};
+  Object.assign(s,{rot:0,bright:100,grid:1,mx:0,my:0,px:Math.round(s.w*256),py:Math.round(s.h*256)});S.surfaces.push(s);return S.surfaces.length-1}
+const fitJpeg=(src,W0,H0,crop,px,py)=>{px=Math.max(16,+px||1024);py=Math.max(16,+py||512);const k=Math.min(1,2048/Math.max(px,py)),c=document.createElement('canvas');c.width=Math.round(px*k);c.height=Math.round(py*k);
+  const a=px/py,b=W0/H0,[sx,sy,sw,sh]=crop||(b>a?[(W0-H0*a)/2,0,H0*a,H0]:[0,(H0-W0/a)/2,W0,W0/a]);c.getContext('2d').drawImage(src,sx,sy,sw,sh,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.8)};
+let mUp=null;
+async function upload(file){const [k,i]=mUp||[],s=S.surfaces[+i];if(!s)return;
+  try{if(k==='img'){const bm=await createImageBitmap(file);s.img=fitJpeg(bm,bm.width,bm.height,null,s.px,s.py);s.src='img';say(`${MKIND[s.kind]} ${+i+1}에 이미지를 넣었습니다 (면 해상도에 맞춰 줄임).`)}
+    else{const id=s.vid||Math.random().toString(36).slice(2,8),v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.src=URL.createObjectURL(file);
+      await new Promise((ok,no)=>{v.onloadeddata=ok;v.onerror=no});v.currentTime=Math.min(.5,(v.duration||1)/10);await new Promise(ok=>{v.onseeked=ok;setTimeout(ok,1500)});
+      s.vimg=fitJpeg(v,v.videoWidth,v.videoHeight,null,s.px,s.py);if(VIDS[id]){VIDS[id].tex.dispose();URL.revokeObjectURL(VIDS[id].v.src)}
+      const t=new THREE.VideoTexture(v);t.encoding=THREE.sRGBEncoding;VIDS[id]={v,tex:t};s.vid=id;s.src='video';v.play().catch(()=>{});say('영상을 넣었습니다. 이 PC에서만 재생되고, 공유 링크에는 첫 장면 사진이 들어갑니다.')}
+    panel();build()}catch(e){say('파일을 읽지 못했습니다. 다른 파일로 해 보세요.')}}
+async function pixelMap(file){try{const bm=await createImageBitmap(file),k=bm.width/3840;let n=0;
+    S.surfaces.forEach(s=>{const sx=(+s.mx||0)*k,sy=(+s.my||0)*k,sw=(+s.px||0)*k,sh=(+s.py||0)*k;if(sw<8||sh<8||sx+sw>bm.width+1||sy+sh>bm.height+1)return;s.img=fitJpeg(bm,bm.width,bm.height,[sx,sy,sw,sh],s.px,s.py);s.src='img';n++});
+    say(n?`픽셀맵(${bm.width}×${bm.height})을 면 ${n}개에 나눠 넣었습니다.`:'픽셀맵 안에 들어가는 면이 없습니다. 면마다 「픽셀맵 위치」와 해상도를 확인해 주세요.');panel();build()}catch(e){say('픽셀맵 그림을 읽지 못했습니다.')}}
+
+// ───────── 저장 · 공유 ─────────
+async function refresh(){try{const r=await fetch('api/scenes?kind=media&detail=1');if(!r.ok)throw 0;SD=await r.json()}catch(e){SD=null}panel()}
+async function share(){let code=await packScene({n:S.name||sceneName,s:serialize(true)});const long=SHARE_PAGE+'#v='+code,hasImg=S.surfaces.some(s=>s.img||s.vimg);
+  document.body.insertAdjacentHTML('beforeend',`<div id="box"><div class="in"><div class="top"><h1>공유하기 (보기 전용)</h1><button id="close">닫기</button></div>
+  <div class="sub">받은 사람은 미디어월을 돌려 보고 시점을 바꿔 볼 수 있지만, 고치지는 못합니다. 지금 화면이 링크에 담기므로 나중에 고치면 링크를 새로 만들어야 합니다.</div>
+  <label>공유 링크<input id="link" readonly value="${esc(long)}"></label>
+  <button class="wide" id="short" style="margin-top:8px">짧은 링크로 만들기 (카카오톡용 · 이미지 포함)</button>
+  <div class="sub" id="smsg" style="margin:6px 0 0">${hasImg?'올린 이미지·영상 첫 장면은 <b style="color:var(--lime)">짧은 링크</b>에만 담깁니다. 위 긴 링크로 열면 그 면은 기본 애니메이션으로 보입니다.':'짧은 링크는 내용을 암호화해 깃허브 공개 저장소에 올려 두고, 열쇠는 링크에만 넣습니다.'}</div>
+  <div class="row two" style="margin-top:10px"><button id="copy" class="on">링크 복사</button><a id="open" href="${esc(long)}" target="_blank" rel="noopener" style="text-align:center;padding:7px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--text)">보기 전용으로 열어 보기</a></div></div></div>`)}
+async function shortLink(btn){btn.disabled=true;const m=$('#smsg'),s2=t=>{if(m)m.textContent=t};s2('암호화해서 올리는 중입니다…');
+  const sealed=await sealScene({n:S.name||sceneName,s:serialize()});if(!sealed){s2('이 브라우저에서는 짧은 링크를 만들 수 없습니다.');btn.disabled=false;return}
+  if(sealed.blob.length>7900000){s2('올린 이미지가 너무 커서 짧은 링크에 담을 수 없습니다. 면 해상도를 줄이거나 이미지를 빼 주세요.');btn.disabled=false;return}
+  try{const r=await fetch('api/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sealed.id,blob:sealed.blob})}),j=await r.json().catch(()=>({}));if(!r.ok)throw j.error||'올리지 못했습니다.';
+    const url=SHARE_PAGE+'#s='+sealed.id+'.'+sealed.key;$('#link').value=url;$('#open').href=url;s2('짧은 링크를 만들었습니다. 깃허브에 반영되는 중이라 1분쯤 뒤부터 열립니다…');
+    for(let k=0;k<30;k++){await new Promise(z=>setTimeout(z,5000));if(!$('#box'))return;try{if((await fetch(SHARE_PAGE.replace(/[^/]*$/,'')+'s/'+sealed.id+'.txt',{cache:'no-store'})).ok){s2('이제 열립니다. 링크를 복사해서 보내세요.');return}}catch(e){}}
+    s2('반영이 늦어지고 있습니다. 몇 분 뒤에 열어 보세요.')}catch(err){s2(typeof err==='string'?err:'올리지 못했습니다. 다시 해 보세요.');btn.disabled=false}}
+
+// ───────── 입력 ─────────
+document.addEventListener('input',e=>{const p=e.target.dataset.p;if(!p)return;const v=e.target.dataset.str!==undefined?e.target.value:parseFloat(e.target.value);if(typeof v==='number'&&isNaN(v))return;
+  set(p,v);if(/^surfaces\.\d+\.(px|py|w|h)$/.test(p)&&e.target.tagName!=='SELECT'){build();return}
+  if(e.target.tagName==='SELECT'||/^space\./.test(p))panel();build()});
+document.addEventListener('change',async e=>{const t=e.target;
+  if(t.id==='mfile'&&t.files[0])upload(t.files[0]);if(t.id==='mapfile'&&t.files[0])pixelMap(t.files[0]);
+  if(/^surfaces\.\d+\.(px|py|w|h)$/.test(t.dataset.p||''))panel();
+  if(t.id==='load'&&t.value){try{const r=await fetch('api/scenes/'+encodeURIComponent(t.value)+'?kind=media');if(!r.ok)throw 0;S=fixState(await r.json());sceneName=t.value;view='out';say(`「${t.value}」을 불러왔습니다.`);panel();build();applyView()}catch(err){say('불러오지 못했습니다.')}}});
+document.addEventListener('click',async e=>{const t=e.target.closest('button,i')||e.target;
+  if(t.dataset.v){view=t.dataset.v;bar();applyView()}
+  if(t.id==='spin'){controls.autoRotate=!controls.autoRotate;controls.autoRotateSpeed=.8;bar()}
+  if(t.id==='snap'){renderer.render(scene,camera);const a=document.createElement('a');a.download='W플레이스_미디어월_'+(S.name||'시안')+'_'+view+'.png';a.href=renderer.domElement.toDataURL('image/png');a.click()}
+  if(t.dataset.tpl){if(S.surfaces.length&&!confirm('지금 만든 공간을 비우고 「'+TPL[t.dataset.tpl].n+'」으로 바꿀까요?'))return;useTpl(t.dataset.tpl);sceneName='';selTag='';say('');panel();build();applyView()}
+  if(t.dataset.add){const i=newSurface(t.dataset.add);selTag='media:'+i;panel();build()}
+  if(t.dataset.del!==undefined){S.surfaces.splice(+t.dataset.del,1);selTag='';chip();panel();build()}
+  if(t.dataset.up){mUp=t.dataset.up.split(',');const f=$('#mfile');f.accept=mUp[0]==='img'?'image/jpeg,image/png,image/webp':'video/*';f.value='';f.click()}
+  if(t.id==='mapbtn'){const f=$('#mapfile');f.value='';f.click()}
+  if(t.id==='fresh'){if(!confirm('지금 화면을 비우고 처음부터 시작할까요? (저장해 둔 것은 그대로 남습니다)'))return;S=JSON.parse(JSON.stringify(DEF));sceneName='';selTag='';say('새로 시작했습니다. 「공간 만들기」에서 하나를 고르세요.');panel();build();applyView()}
+  if(t.id==='save'){const nm=(S.name||'').trim();if(!nm)return say('이름을 먼저 적어 주세요.');if(SD&&SD.some(x=>x.name===nm)&&nm!==sceneName&&!confirm(`「${nm}」이 이미 있습니다. 덮어쓸까요?`))return;
+    try{const r=await fetch('api/scenes/'+encodeURIComponent(nm)+'?kind=media',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(serialize())});const j=await r.json().catch(()=>({}));if(!r.ok)throw j.error||0;sceneName=nm;say(`「${nm}」을 저장했습니다.`);refresh()}catch(err){say(typeof err==='string'?err:'저장하지 못했습니다.')}}
+  if(t.id==='share')share();if(t.id==='close')$('#box').remove();if(t.id==='short')shortLink(t);
+  if(t.id==='copy'){const i=$('#link');i.select();(navigator.clipboard?navigator.clipboard.writeText(i.value):Promise.reject()).catch(()=>document.execCommand('copy'));t.textContent='복사했습니다'}});
+
+// 화면에서 면 고르기 · 끌기 · 방향키
+const ray=new THREE.Raycaster();
+const chip=()=>{const c=$('#chip'),s=S.surfaces[+selTag.slice(6)];c.style.display=selTag&&s&&!VIEW?'block':'none';if(s)c.textContent=`선택: ${MKIND[s.kind]} ${+selTag.slice(6)+1} · 방향키로 10cm씩 (Shift 50cm, ⌥ 1cm)`};
+function pick(cx,cy){const r=renderer.domElement.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height)*2+1),camera);
+  for(const h of ray.intersectObjects(dyn.children,true)){let o=h.object;if(o.userData.lbl)continue;while(o&&!o.userData.sel)o=o.parent;if(o)return o.userData.sel;if(!h.object.userData.hit)return ''}return ''}
+function floorAt(cx,cy,y){const r=renderer.domElement.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height)*2+1),camera);const v=new THREE.Vector3();return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-y),v)?v:null}
+{const cv=renderer.domElement;let dn=null;
+  cv.addEventListener('pointerdown',e=>{if(VIEW)return;dn={x:e.clientX,y:e.clientY,moved:false};const t=pick(e.clientX,e.clientY);if(t){const s=S.surfaces[+t.slice(6)],y=s.kind==='wall'?0:+s.y||0,h0=floorAt(e.clientX,e.clientY,y);dn.drag=t;dn.y=y;dn.off=h0?{x:(+s.x||0)-h0.x,z:(+s.z||0)-h0.z}:{x:0,z:0};controls.enabled=false;cv.setPointerCapture(e.pointerId)}});
+  cv.addEventListener('pointermove',e=>{if(!dn)return;if(Math.abs(e.clientX-dn.x)+Math.abs(e.clientY-dn.y)>4)dn.moved=true;if(!dn.drag||!dn.moved)return;const hp=floorAt(e.clientX,e.clientY,dn.y);if(!hp)return;const s=S.surfaces[+dn.drag.slice(6)];s.x=r1(hp.x+dn.off.x);s.z=r1(hp.z+dn.off.z);dn.dragged=true;if(!cv._raf)cv._raf=requestAnimationFrame(()=>{cv._raf=0;build()})});
+  cv.addEventListener('pointerup',e=>{const d=dn;dn=null;controls.enabled=true;if(!d)return;if(d.drag){selTag=d.drag;chip();panel();const c=document.querySelector(`[data-sec="${selTag}"]`);if(c)c.scrollIntoView({behavior:'smooth',block:'center'});return}
+    if(!d.moved){selTag='';chip();panel()}})}
+addEventListener('keydown',e=>{if(VIEW||!selTag||/INPUT|SELECT|TEXTAREA/.test((e.target||{}).tagName||''))return;const st=e.shiftKey?.5:e.altKey?.01:.1,dv={ArrowLeft:[-st,0],ArrowRight:[st,0],ArrowUp:[0,-st],ArrowDown:[0,st]}[e.key];if(!dv)return;e.preventDefault();
+  const s=S.surfaces[+selTag.slice(6)];if(!s)return;s.x=r2((+s.x||0)+dv[0]);s.z=r2((+s.z||0)+dv[1]);panel();build()});
+
+function resize(){const W=el.clientWidth,H=el.clientHeight;renderer.setSize(W,H);applyView(true)}
+addEventListener('resize',resize);
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+(function loop(now){requestAnimationFrame(loop);if(anim){const k=Math.min(1,((now||0)-anim.s)/900),e=ease(k);camera.position.lerpVectors(anim.from.p,anim.to.p,e);controls.target.lerpVectors(anim.from.t,anim.to.t,e);if(k===1)anim=null}
+  controls.update();mediaTick();renderer.render(scene,camera)})();
+
+// ───────── 시작 ─────────
+(async()=>{
+  if(VIEW){document.body.classList.add('viewer');
+    try{if(location.hash.startsWith('#s='))S=fixState((await openSealed(HPAY)).s);else if(location.hash.startsWith('#v=')){const o=await unpackScene(HPAY);S=fixState(o.s)}else useTpl('forest');
+      view=HOPT.get('view')||(S.surfaces.length?'front':'out')}catch(e){useTpl('forest');document.body.insertAdjacentHTML('beforeend',`<div id="box"><div class="in" style="max-width:480px"><h1>링크를 열지 못했습니다</h1><div class="sub">${e===404?'방금 만든 링크라면 1분쯤 뒤에 다시 열어 주세요.':'주소가 중간에 잘렸을 수 있습니다. 보낸 분에게 링크를 다시 받아 주세요.'} 아래는 예시 화면입니다.</div><button id="close">닫기</button></div></div>`)}
+    const d=S.when&&S.when.date?new Date(S.when.date+'T00:00:00'):null;
+    $('#vtitle').innerHTML=`<b>${esc(S.name||'미디어월 미리보기')}</b>${d&&!isNaN(d)?`<br><span style="color:var(--lime)">${d.getFullYear()}년 ${d.getMonth()+1}월 ${d.getDate()}일</span>`:''}<br><span style="color:var(--dim)">${S.surfaces.map(s=>`${MKIND[s.kind]} ${s.w}×${s.h}m`).join(' · ')}</span><br><span style="color:var(--dim)">위 버튼으로 시점을 바꾸고, 끌어서 돌려 봅니다</span>`;
+    build();resize();camera.position.set(0,0,0);applyView();bar();return}
+  try{const c=JSON.parse(localStorage.getItem('place-media-current')||'null');if(c&&c.s&&c.s.surfaces&&c.s.surfaces.length){S=fixState(c.s);sceneName=c.name||''}else useTpl('forest')}catch(e){useTpl('forest')}
+  panel();build();resize();camera.position.set(0,0,0);view='front';applyView();bar();refresh();
+})();
+</script>
+<script>
+// 우군이 AI 포털 공통 메뉴 (사내 모드에서만)
+if(!document.body.classList.contains('viewer')&&!window.PLACE_PUBLIC)fetch('/api/portal-shell').then(r=>r.ok?r.json():{}).then(sh=>{
+  if(!sh.portal||!sh.categories||document.body.classList.contains('viewer'))return;
+  const css=document.createElement('link');css.rel='stylesheet';css.href=sh.portal_url+'/static/shell/rail.css?v=20261102c';document.head.append(css);
+  const js=document.createElement('script');js.src=sh.portal_url+'/static/shell/rail.js?v=20261103b';
+  js.onload=()=>{const rail=document.createElement('nav');document.body.prepend(rail);document.body.classList.add('has-wr-rail','has-wr-tabs');
+    const opt={categories:sh.categories,current:'pre',isAdmin:sh.is_admin,portalUrl:sh.portal_url,here:{id:'pre',href:'/media.html'},links:sh.links};
+    window.WoogooniRail.render(rail,opt);const tabs=document.createElement('nav');document.body.append(tabs);window.WoogooniRail.renderTabs(tabs,{...opt,current:'more'});window.dispatchEvent(new Event('resize'))};
+  document.head.append(js)}).catch(()=>{});
+</script>
+</body>
+</html>
