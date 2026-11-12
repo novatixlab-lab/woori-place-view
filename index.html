@@ -34,6 +34,9 @@
   #bar .sp{flex:1}
   #view{position:absolute;inset:0}
   canvas{display:block}
+  #selchip{display:none;position:absolute;left:12px;top:56px;z-index:2;background:var(--lime);color:#0B0D1E;font-weight:700;font-size:13px;padding:5px 12px;border-radius:999px}
+  .pick{outline:2px solid var(--lime);outline-offset:3px;border-radius:8px;transition:outline-color .2s}
+  body:not(.viewer) #frame{cursor:grab}
   #brand{display:none}
   body.viewer #app{grid-template-columns:1fr;grid-template-rows:1fr}body.viewer #panel{display:none}
   body.viewer #main{order:0}body.viewer #view{bottom:34px}
@@ -67,7 +70,7 @@
 <body>
 <div id="app">
   <div id="panel"></div>
-  <div id="main"><div id="bar"></div><div id="view"></div><div id="frame"><span id="framecap"></span></div><div id="vtitle"></div></div>
+  <div id="main"><div id="bar"></div><div id="view"></div><div id="frame"><span id="framecap"></span></div><div id="vtitle"></div><div id="selchip"></div></div>
 </div>
 <meta name="robots" content="noindex,nofollow">
 <script>window.PLACE_PUBLIC=1</script>
@@ -94,6 +97,7 @@ const LENS=[[60,'넓게 (전체 풀샷)'],[35,'보통 (무대 전체)'],[20,'당
 let view='3d',_pb=false;
 // ── 공유(보기 전용): 배치 내용을 주소 뒤(#v=...)에 담는다. 서버에 저장하지 않으므로 어느 웹 주소에 올려도 열린다.
 const VIEW=location.hash.startsWith('#v=');
+const SHARE_BASE='https://novatixlab-lab.github.io/woori-place-view/';   // 보기 전용 화면을 올려 둔 주소 (tools/build_public.py 로 만든 묶음)
 const b64u=u8=>{let t='';u8.forEach(b=>t+=String.fromCharCode(b));return btoa(t).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')};
 const unb64u=t=>Uint8Array.from(atob(t.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
 const pipe=async(u8,ts)=>new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(ts)).arrayBuffer());
@@ -193,20 +197,20 @@ function panel(){
   ${S.venue.look?(L=>`<div class="note" style="margin-top:8px"><b>사진 느낌 적용됨</b> · ${esc(L.space)}<br>${esc(L.summary)}${L.estimate&&L.estimate.w?`<br>사진으로 어림한 크기 약 ${L.estimate.w} × ${L.estimate.d}m · 높이 ${L.estimate.h}m <span style="color:#ffb347">(정확하지 않음)</span>`:''}
   <div class="row two" style="margin:6px 0 0">${L.estimate&&L.estimate.w?'<button id="lookdims">이 크기로 바꾸기</button>':'<span></span>'}<button id="lookclear">느낌 지우기</button></div></div>`)(S.venue.look):''}
   <div class="sub" id="lookmsg" style="margin:6px 0 0;color:var(--lime)"></div>
-  <h2>무대 (덧마루 조립)</h2>
+  <h2 data-sec="stage">무대 (덧마루 조립)</h2>
   <label>덧마루 한 장 크기<select data-p="unit" data-str>${Object.entries(UNITS).map(([k,v])=>`<option value="${k}" ${S.unit===k?'selected':''}>${v[2]}</option>`).join('')}</select></label>
   ${S.tiers.map((t,i)=>`<div style="margin-top:8px;font-size:12.5px">${t.name}</div>
   <div class="row">${num(`tiers.${i}.cols`,'가로 장 수',1)}${num(`tiers.${i}.rows`,'세로 장 수',1)}<label>높이<select data-p="tiers.${i}.h">${HEIGHTS.map(x=>`<option value="${x[0]}" ${t.h==x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label></div>`).join('')}
   <div class="note" id="count"></div>
-  <h2>LED 화면</h2>
+  <h2 data-sec="led">LED 화면</h2>
   <div class="row">${num('screen.n','폴딩 대 수',1)}${num('screen.cw','가로 직접 m',0.5)}${num('screen.h','높이 m',0.1)}</div>
   <div class="sub" style="margin:0 0 6px">폴딩 LED는 1대 가로 1,280mm. 「가로 직접」에 숫자를 넣으면 그 크기의 LED 벽으로 그립니다(0이면 폴딩 대 수 기준).</div>
   <label>화면에 띄울 글자<input data-p="screen.text" data-str value="${esc(S.screen.text||'')}"></label>
   <div class="note" id="ledn"></div>
-  <h2>발표자</h2>
+  <h2 data-sec="presenter">발표자</h2>
   <div class="row two"><label>모습<select data-p="presenter.mode" data-str>${[['stand','서서 (보면대)'],['table','테이블에 앉음'],['none','없음']].map(o=>`<option value="${o[0]}" ${S.presenter.mode===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>${num('presenter.dist','LED 앞 거리 m')}</div>
   <div class="sub" style="margin:0">무대(데크)가 있으면 무대 위에, 없으면 LED 앞 거리만큼 떨어진 바닥에 섭니다.</div>
-  <h2>객석</h2>
+  <h2 data-sec="seats">객석</h2>
   <label>놓는 방식<select data-p="seats.layout" data-str>${[['theater','일자로 (극장식)'],['curve','둥글게 (부채꼴)'],['chevron','비스듬히 (V자)'],['round','원탁 (연회식)'],['class','책상과 함께 (강의식)'],['tier','계단식 (수납 객석)']].map(o=>`<option value="${o[0]}" ${S.seats.layout===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>
   ${(t=>t?`<div class="row two" style="margin-top:6px">${num('seats.rows','테이블 줄 수',1)}${num('seats.cols','한 줄 테이블 수',1)}</div>
   <div class="row two">${S.seats.layout==='round'?`<label>원탁 지름<select data-p="seats.tableD">${[1.2,1.5,1.8].map(v=>`<option value="${v}" ${S.seats.tableD==v?'selected':''}>${v*1000}mm</option>`).join('')}</select></label>`:'<label>책상<input value="1800 × 450mm" disabled></label>'}${num('seats.perTable','테이블당 의자',1)}</div>`
@@ -218,7 +222,7 @@ function panel(){
   <label>품목<select id="pitem">${CAT.filter(c=>c.cat===pickCat).map(c=>`<option value="${c.id}" ${c.ok?'':'disabled'}>${c.name} — ${c.ok?(c.sure?'':c.status==='없음'?'추정 ':'통상값 '):''}${dims(c)}</option>`).join('')}</select></label></div>
   <button class="wide" id="additem">+ 이 비품 놓기</button>
   <div style="height:8px"></div>
-  ${S.items.map((it,i)=>{const c=CAT[it.id];return `<div class="cam"><div class="top"><b>${c.name}</b><button class="x" data-delitem="${i}">빼기</button></div>
+  ${S.items.map((it,i)=>{const c=CAT[it.id];return `<div class="cam" data-sec="item:${i}"><div class="top"><b>${c.name}</b><button class="x" data-delitem="${i}">빼기</button></div>
   <div class="sub" style="margin:0 0 6px">${dims(c)} · <span style="color:${bcol(c)}">${badge(c)}</span></div>
   <div class="row">${num(`items.${i}.x`,'좌우 m')}${num(`items.${i}.z`,'무대 앞에서 m')}${num(`items.${i}.rot`,'회전 °',15)}</div>
   <div class="row">${num(`items.${i}.nx`,'가로 개수',1)}${num(`items.${i}.nz`,'세로 개수',1)}${num(`items.${i}.gap`,'간격 m',0.1)}</div></div>`}).join('')}
@@ -226,7 +230,7 @@ function panel(){
   <div class="note" id="tally"></div>
   <button class="wide" id="showcat">비품 목록 · 치수 확인표 보기</button>
   <h2>카메라</h2>
-  ${S.cams.map((c,i)=>`<div class="cam" style="border-left:3px solid ${camCol(c,i)}"><div class="top"><b>${c.name}</b><button class="x" data-del="${i}">빼기</button></div>
+  ${S.cams.map((c,i)=>`<div class="cam" data-sec="cam:${i}" style="border-left:3px solid ${camCol(c,i)}"><div class="top"><b>${c.name}</b><button class="x" data-del="${i}">빼기</button></div>
   <div class="sws">${CAMCOL.map(k=>`<i data-col="${i},${k}" title="촬영 범위 색" style="background:${k}" class="${camCol(c,i)===k?'on':''}"></i>`).join('')}</div>
   <div class="row">${num(`cams.${i}.x`,'좌우 m')}${num(`cams.${i}.dist`,'무대에서 m')}${num(`cams.${i}.h`,'높이 m',0.1)}</div>
   <label>본체 · 해상도 설정<select data-p="cams.${i}.body" data-str>${Object.entries(BODIES).map(([k,b])=>`<option value="${k}" ${(c.body||'g2_4k')===k?'selected':''}>${b.n}${b.ok?'':' *'}</option>`).join('')}</select></label>
@@ -285,13 +289,14 @@ function showSheet(){
 }
 async function showShare(){
   let base='';try{base=localStorage.getItem('place-share-base')||''}catch(e){}
+  if(!base)base=SHARE_BASE;
   const code=await packScene({n:sceneName.trim(),s:serialize()}),here=location.origin+location.pathname,mk=b=>(b||here).replace(/#.*$/,'')+'#v='+code,local=/^(localhost|127\.|\[::1\])/.test(location.host);
   document.body.insertAdjacentHTML('beforeend',`<div id="sharebox"><div class="in" style="max-width:640px"><div class="top"><h1>공유하기 (보기 전용)</h1><button id="closeshare">닫기</button></div>
   <div class="sub">이 링크를 받은 사람은 입체·위에서·객석·카메라별 화면과 카메라 배치표를 눌러 볼 수 있고, 배치를 바꾸지는 못합니다. 지금 화면의 배치가 링크 안에 그대로 담깁니다(나중에 고치면 링크를 새로 만들어야 합니다).</div>
   <label>공유 링크<input id="sharelink" readonly value="${esc(mk(base))}"></label>
   <div class="row two" style="margin-top:8px"><button id="copyshare" class="on">링크 복사</button><a href="${esc(mk(base))}" target="_blank" rel="noopener" style="text-align:center;padding:7px;border:1px solid var(--line);border-radius:8px;text-decoration:none">보기 전용으로 열어 보기</a></div>
   ${local&&!base?'<div class="note" style="margin-top:10px;border-color:#ffb347"><b style="color:#ffb347">아직 이 맥 안에서만 열리는 주소입니다.</b><br>밖에 있는 사람에게 보내려면 W플레이스 보기 화면을 인터넷 주소에 올려야 합니다. 올린 뒤 아래 칸에 그 주소를 넣으면 링크가 그 주소로 만들어집니다.</div>':''}
-  <label style="margin-top:10px">인터넷에 올린 W플레이스 주소 (없으면 비워 두기)<input id="sharebase" placeholder="예: https://place.우리미디어주소" value="${esc(base)}"></label></div></div>`);
+  <label style="margin-top:10px">보기 화면이 올라가 있는 주소 (보통 그대로 두기)<input id="sharebase" placeholder="예: https://place.우리미디어주소" value="${esc(base)}"></label></div></div>`);
   $('#sharebase').addEventListener('input',e=>{const b=e.target.value.trim();try{localStorage.setItem('place-share-base',b)}catch(x){}$('#sharelink').value=mk(b)});
 }
 function setShot(c,k){const sh=SHOTS.find(x=>x[0]===k);if(!sh)return;c.shot=k;const D=camPos(c).distanceTo(camAim(c));c.f=D*camSH(c)/sh[2];c.f=camF(c)}
@@ -328,7 +333,7 @@ function showCat(){
 }
 document.addEventListener('click',e=>{
   const t=e.target;
-  if(t.dataset.v){view=t.dataset.v;bar();applyView()}
+  if(t.dataset.v){view=t.dataset.v;bar();applyView();if(view.startsWith('cam'))selectTag('cam:'+view.slice(3))}
   if(t.dataset.del!==undefined){S.cams.splice(+t.dataset.del,1);S.cams.forEach((c,i)=>c.name='CAM '+(i+1));if(view.startsWith('cam'))view='3d';panel();build()}
   if(t.dataset.delitem!==undefined){S.items.splice(+t.dataset.delitem,1);panel();build()}
   if(t.id==='additem'){const id=+$('#pitem').value;if(CAT[id]&&CAT[id].ok){S.items.push({id,x:0,z:2,rot:0,nx:1,nz:1,gap:0.1});panel();build()}}
@@ -454,9 +459,20 @@ function drawItem(p,c,x,y,z){
   const o=box(w,h,d,m,x,y+h/2,z,p);
   o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry),new THREE.LineBasicMaterial({color:c.sure?0xD4F53C:0xffb347})));
 }
+// ── 화면에서 눌러 고르기: 그릴 때 물체마다 무엇인지(무대·LED·객석·카메라…) 표시해 둔다
+let _ti=[0,0],_tt='',selTag='';
+function tagTo(next){[dyn,helpers].forEach((g,k)=>{for(let i=_ti[k];i<g.children.length;i++)g.children[i].userData.sel=_tt;_ti[k]=g.children.length});_tt=next}
+const SELNAME=t=>t.startsWith('cam:')?(S.cams[+t.slice(4)]||{}).name:t.startsWith('item:')?(CAT[(S.items[+t.slice(5)]||{}).id]||{}).name:({stage:'무대',led:'LED 화면',presenter:'발표자',seats:'객석'})[t];
+function selectTag(t){selTag=t;const chip=$('#selchip');chip.textContent=t?'선택: '+(SELNAME(t)||''):'';chip.style.display=t?'block':'none';
+  document.querySelectorAll('.pick').forEach(e=>e.classList.remove('pick'));if(!t||VIEW)return;
+  const e=document.querySelector(`[data-sec="${t}"]`);if(e){e.classList.add('pick');e.scrollIntoView({behavior:'smooth',block:'center'})}}
+const ray=new THREE.Raycaster();
+function pickAt(cx,cy){const r=renderer.domElement.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height)*2+1),camera);
+  for(const h of ray.intersectObjects(dyn.children,true)){let o=h.object;if(!o.visible||o.type==='LineSegments'||(o.material&&o.material.transparent&&o.material.opacity<.5))continue;
+    while(o&&o.userData.sel===undefined)o=o.parent;if(o&&o.userData.sel)return o.userData.sel;if(o&&o.userData.sel==='')return ''}return ''}
 function build(){
   dyn.traverse(o=>{if(o.geometry)o.geometry.dispose()});tmpTex.forEach(t=>t.dispose());tmpTex=[];
-  scene.remove(dyn);dyn=new THREE.Group();roof=new THREE.Group();helpers=new THREE.Group();dyn.add(roof,helpers);scene.add(dyn);
+  scene.remove(dyn);dyn=new THREE.Group();roof=new THREE.Group();helpers=new THREE.Group();dyn.add(roof,helpers);scene.add(dyn);_ti=[dyn.children.length,0];_tt='';
   const {w,d,h}=S.venue,hall=S.venue.style==='hall',span=Math.max(w,d);
   Object.assign(sun.shadow.camera,{left:-span,right:span,top:span,bottom:-span,far:span*4+40});sun.position.set(span*.3,span*.7+8,span*.5);sun.shadow.camera.updateProjectionMatrix();
   hemi.intensity=hall?.2:.42;sun.intensity=hall?.2:.5;
@@ -494,6 +510,7 @@ function build(){
     r.rotation.order='ZXY';r.rotation.set(Math.PI/2,0,-sd*ang);r.position.set(sd*rw/4,h+rise/2+.12,0);rg.add(r)}
   for(const sd of[-1,1]){const gbl=new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sd*w/2,h,-d/2),new THREE.Vector3(sd*w/2,h,d/2),new THREE.Vector3(sd*w/2,h+rise,0)]),new THREE.MeshBasicMaterial({color:0xcfcbc3,side:THREE.DoubleSide}));roof.add(gbl)}
   }
+  tagTo('stage');
   // 무대
   const zBack=-d/2+1,a=tier(S.tiers[0],zBack),b=tier(S.tiers[1],zBack+a.d);
   const frontZ=zBack+a.d+b.d,topH=Math.max(a.h||0,b.h||0),stageMidZ=zBack+(a.d+b.d)/2;
@@ -507,21 +524,25 @@ function build(){
   $('#ledn').innerHTML=sw?`LED 전체 <b>가로 ${sw}m × 높이 ${S.screen.h}m</b>${cwid?' (LED 벽)':''}<br>`+(a.n?(gap>=0?`무대가 LED보다 좌우 <b>${gap}mm씩 여유</b>`:`무대가 LED보다 좌우 <b>${-gap}mm씩 좁음</b>`):''):'LED 없음';
   if(a.n)label(`${S.tiers[0].name} ${a.w}×${a.d}m · 높이 ${S.tiers[0].h*10}mm`,0,a.h+S.screen.h+1.1,zBack+a.d/2);
   if(b.n)label(`${S.tiers[1].name} ${b.w}×${b.d}m · 높이 ${S.tiers[1].h*10}mm`,0,b.h+.45,frontZ+.5,.8);
+  tagTo('led');
   // 뒤 화면
   if(sw>0&&S.screen.h>0){const sy=(a.h||0)+S.screen.h/2,n=Math.max(1,Math.round(sw/UW));
     box(sw,S.screen.h,.1,mat.dark,0,sy,zBack+a.d/2);
     for(let i=1;i<n;i++)box(.012,S.screen.h,.01,mat.dark,-sw/2+UW*i,sy,zBack+a.d/2+.062,dyn,false);
     const scr=new THREE.Mesh(new THREE.PlaneGeometry(sw,S.screen.h-.02),new THREE.MeshBasicMaterial({map:ledTex(S.screen.text||'',S.screen.h/sw),toneMapped:false}));scr.position.set(0,sy,zBack+a.d/2+.058);dyn.add(scr);
     const glow=new THREE.PointLight(0x8a7cff,.45,Math.max(10,sw*2.5));glow.position.set(0,sy,zBack+a.d/2+1.2);dyn.add(glow)}
+  tagTo('');
   // 무대 조명
   const spot=(x,z,int,sh)=>{const l=new THREE.SpotLight(0xfff0d8,int,0,Math.PI/5.5,.55,1);l.position.set(x,Math.max(h-.3,3.2),z);l.target.position.set(x*.35,topH,stageMidZ);l.castShadow=sh;if(sh){l.shadow.mapSize.set(1024,1024);l.shadow.bias=-.0005;l.shadow.radius=5}dyn.add(l,l.target)};
   const stW=Math.max(a.w||0,b.w||0,3);if(a.n||b.n||PR.mode!=='none'){spot(-stW*.5,frontZ+4,1.25,true);spot(stW*.5,frontZ+4,1.25,false);spot(0,frontZ+6,.6,false)}
+  tagTo('presenter');
   // 발표자·보면대
   if(sit){personSit(0,ph,pz,mat.suit);chair(dyn,0,ph,pz-.1,.46,.46,.9,chairMat('접이식'));   // 테이블에 앉은 발표자(객석을 봄)
     box(1.8,.04,.75,cloth0,0,ph+.74,pz+.62);box(1.8,.72,.02,cloth0,0,ph+.37,pz+.99);for(const ax of[-1,1])box(.02,.72,.75,cloth0,ax*.9,ph+.37,pz+.62);
     box(.3,.1,.02,M(0xffffff),0,ph+.81,pz+.9);box(.02,.25,.02,mat.dark,.35,ph+.88,pz+.75);   // 명패·마이크
     label(`테이블 1.8×0.75m · LED 앞 ${r1(pz-zBack)}m`,0,ph+1.9,pz,.7)}
   else if(PR.mode!=='none'&&(a.n||b.n||noDeck)){person(0,ph,pz,mat.shirt);box(.5,.03,.35,mat.dark,.7,ph+1.05,pz);box(.03,1.05,.03,mat.dark,.7,ph+.52,pz)}
+  tagTo('seats');
   // 객석
   const sc=CAT[S.seats.chair],cw=sc?sc.w/1000:.44,cd=sc?sc.d/1000:.44,chh=sc?sc.h/1000:.9;let seatN=0;
   const sx=cw+.12,sz=cd+.55,aisle=1.2,cols=Math.max(0,Math.round(S.seats.cols)),rows=Math.max(0,Math.round(S.seats.rows)),half=Math.ceil(cols/2);
@@ -552,7 +573,7 @@ function build(){
   }else for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const side=c<half?-1:1,k=c<half?half-1-c:c-half;seat(side*(aisle/2+sx*(k+.5)),z0+r*sz,0)}
   // 놓은 비품
   const tl=[`데크 <b>${a.n+b.n}장</b>`,`객석 의자(${sc?sc.name:'기본'}) <b>${seatN}개</b>`];if(tableN)tl.push(`객석 ${lay==='round'?'원탁':'책상'} <b>${tableN}개</b>`);
-  S.items.forEach(it=>{const c=CAT[it.id];if(!c||!c.ok)return;
+  S.items.forEach((it,ii)=>{tagTo('item:'+ii);const c=CAT[it.id];if(!c||!c.ok)return;
     const nx=Math.max(1,Math.round(it.nx)||1),nz=Math.max(1,Math.round(it.nz)||1),gp=it.gap||0,w=c.w/1000,dd=c.d/1000;
     const g=new THREE.Group();g.position.set(it.x,floorY(it.x,frontZ+it.z),frontZ+it.z);g.rotation.y=-(it.rot||0)*Math.PI/180;dyn.add(g);
     for(let i=0;i<nx;i++)for(let j=0;j<nz;j++)drawItem(g,c,(i-(nx-1)/2)*(w+gp),0,(j-(nz-1)/2)*(dd+gp));
@@ -560,7 +581,7 @@ function build(){
   tl.push(`카메라 <b>${S.cams.length}대</b>`,(cwid?`LED 벽 <b>${sw} × ${S.screen.h}m</b>`:`폴딩 LED <b>${Math.max(0,Math.round(S.screen.n))}대</b>`));
   $('#tally').innerHTML=tl.join('<br>');
   // 카메라
-  S.cams.forEach((c,i)=>{
+  S.cams.forEach((c,i)=>{tagTo('cam:'+i);
     const pos=camPos(c),aim=camAim(c),g=new THREE.Group();g.position.copy(pos);g.lookAt(aim);helpers.add(g);
     box(.28,.24,.5,mat.dark,0,0,0,g);const ln=new THREE.Mesh(new THREE.CylinderGeometry(.09,.11,.3,16),mat.dark);ln.rotation.x=Math.PI/2;ln.position.z=.38;g.add(ln);
     const base=camBase(c);box(.05,c.h,.05,mat.dark,c.x,base+c.h/2,frontZ+c.dist,helpers);
@@ -575,6 +596,7 @@ function build(){
     g.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints([P[0],P[1],P[0],P[2],P[0],P[3],P[0],P[4],P[1],P[2],P[2],P[3],P[3],P[4],P[4],P[1]]),new THREE.LineBasicMaterial({color:new THREE.Color(camCol(c,i)),toneMapped:false})));
     label(c.name,c.x,base+c.h+.7,frontZ+c.dist,.45,camCol(c,i));
   });
+  tagTo('');
   if(!VIEW)try{localStorage.setItem('stage3d-current',JSON.stringify({name:sceneName,s:serialize()}))}catch(e){}
   applyView();
 }
@@ -594,6 +616,18 @@ function applyView(){
 }
 function resize(){const W=el.clientWidth,H=el.clientHeight;renderer.setSize(W,H);camera.aspect=W/H;applyView()}
 addEventListener('resize',resize);
+// 마우스: 살짝 누르면 고르기, 카메라 화면에서 끌면 방향 돌리기, 휠은 줌
+{const cv=renderer.domElement;let dn=null;
+  cv.addEventListener('pointerdown',e=>{dn={x:e.clientX,y:e.clientY,moved:false};if(view.startsWith('cam')&&!VIEW)cv.setPointerCapture(e.pointerId)});
+  cv.addEventListener('pointermove',e=>{if(!dn)return;const dx=e.clientX-dn.x,dy=e.clientY-dn.y;if(Math.abs(dx)+Math.abs(dy)>4)dn.moved=true;
+    if(!dn.moved||VIEW||!view.startsWith('cam'))return;const i=+view.slice(3),c=S.cams[i];if(!c)return;
+    const perPx=camFov(c)/$('#frame').clientWidth;c.pan=Math.round(((+c.pan||0)-dx*perPx)*10)/10;c.tilt=Math.round(((+c.tilt||0)+dy*perPx)*10)/10;dn.x=e.clientX;dn.y=e.clientY;dn.turned=true;
+    const a=document.querySelector(`[data-p="cams.${i}.pan"]`),b=document.querySelector(`[data-p="cams.${i}.tilt"]`);if(a)a.value=c.pan;if(b)b.value=c.tilt;applyView()});
+  cv.addEventListener('pointerup',e=>{const d=dn;dn=null;if(!d)return;if(d.turned)return build();
+    if(!d.moved&&!view.startsWith('cam')&&view!=='seat')selectTag(pickAt(e.clientX,e.clientY))});
+  cv.addEventListener('wheel',e=>{if(VIEW||!view.startsWith('cam'))return;e.preventDefault();const i=+view.slice(3),c=S.cams[i];if(!c)return;
+    c.f=camF(c)*Math.exp(-e.deltaY*.0015);c.f=camF(c);c.shot='';const z=document.querySelector(`[data-zoom="${i}"]`);if(z)z.value=zoomPos(c);
+    document.querySelectorAll(`[data-shot^="${i},"]`).forEach(b=>b.classList.remove('on'));applyView();clearTimeout(cv._wt);cv._wt=setTimeout(build,250)},{passive:false});}
 (async()=>{
   if(VIEW){document.body.classList.add('viewer');scenes=null;
     try{const o=await unpackScene(location.hash.slice(3));restore(o.s);sceneName=o.n||''}catch(e){document.body.insertAdjacentHTML('beforeend','<div id="sharebox"><div class="in" style="max-width:480px"><h1>링크를 열지 못했습니다</h1><div class="sub">주소가 중간에 잘렸을 수 있습니다. 보낸 분에게 링크를 다시 받아 주세요.</div></div></div>')}
