@@ -103,7 +103,9 @@ const TPL={
 let S=JSON.parse(JSON.stringify(DEF)),sceneName='',view='out',selTag='',msg='',SD=[];
 const fixState=o=>{const d=JSON.parse(JSON.stringify(DEF));o=o&&typeof o==='object'?o:{};return {name:o.name||'',when:Object.assign(d.when,o.when),space:Object.assign(d.space,o.space),
   surfaces:(Array.isArray(o.surfaces)?o.surfaces:[]).filter(s=>s&&MKIND[s.kind])}};
-const serialize=lite=>{const o=JSON.parse(JSON.stringify(S));o.surfaces.forEach(s=>{delete s.vid;if(lite){delete s.img;delete s.vimg}});return o};
+const serialize=lite=>{const o=JSON.parse(JSON.stringify(S));o.surfaces.forEach(s=>{delete s.vid;if(lite){delete s.img;delete s.vimg;delete s.alts}});return o};
+// 한 면에 시안 그림 여러 장(alts)을 넣어 두고 바꿔 볼 수 있다: 고른 것(pick)을 img 로 쓴다
+function pickAlt(i,k){const s=S.surfaces[i];if(!s||!s.alts||!s.alts[k])return;s.pick=k;s.img=s.alts[k].img;s.src='img'}
 const useTpl=k=>{S=fixState(JSON.parse(JSON.stringify(TPL[k].s)));view='out'};
 
 // ───────── 3D ─────────
@@ -237,7 +239,8 @@ function applyView(keep){const v=viewPos(view);camera.aspect=el.clientWidth/Math
   if(keep)return;const to={p:new THREE.Vector3(...v.p),t:new THREE.Vector3(...v.t)};
   if(matchMedia('(prefers-reduced-motion: reduce)').matches||!anim&&camera.position.lengthSq()===0){camera.position.copy(to.p);controls.target.copy(to.t);return}
   anim={from:{p:camera.position.clone(),t:controls.target.clone()},to,s:performance.now()}}
-function bar(){$('#bar').innerHTML=VIEWS.map(([k,n])=>`<button data-v="${k}" class="${view===k?'on':''}">${n}</button>`).join('')+`<button id="spin" class="${controls.autoRotate?'on':''}">자동 회전</button><span class="sp"></span>`+
+function bar(){$('#bar').innerHTML=VIEWS.map(([k,n])=>`<button data-v="${k}" class="${view===k?'on':''}">${n}</button>`).join('')+`<button id="spin" class="${controls.autoRotate?'on':''}">자동 회전</button>`+
+  S.surfaces.map((s,i)=>(s.alts||[]).length>1?`<span style="display:inline-flex;gap:4px;align-items:center;background:rgba(11,13,30,.7);border:1px solid var(--line);border-radius:10px;padding:3px 6px"><span style="font-size:12px;color:var(--dim)">${esc(s.name||MKIND[s.kind])}</span>${s.alts.map((a,k)=>`<button data-alt="${i},${k}" class="${s.src==='img'&&+s.pick===k?'on':''}" style="padding:4px 9px">${k+1}</button>`).join('')}</span>`:'').join('')+`<span class="sp"></span>`+
   (VIEW?'':`<a href="./" target="_blank" rel="noopener"><button>W플레이스 도면</button></a><button id="share">공유하기</button>`)+`<button id="snap">이미지 저장</button>`}
 
 // ───────── 왼쪽 설정 칸 ─────────
@@ -272,6 +275,8 @@ function panel(){if(VIEW)return;const P=S.space,M2=S.surfaces;
     ${k==='floor'?'':`<div class="row two">${num(o('rot'),'회전 °',15)}<span></span></div>`}
     <label>띄울 콘텐츠<select data-p="${o('src')}" data-str>${MANIM.map(([v,n])=>`<option value="${v}" ${s.src===v?'selected':''}>${n}</option>`).join('')}${s.img?`<option value="img" ${s.src==='img'?'selected':''}>올린 이미지</option>`:''}${s.vimg?`<option value="video" ${s.src==='video'?'selected':''}>올린 영상</option>`:''}</select></label>
     <div class="row two" style="margin-top:6px"><button data-up="img,${i}">이미지 올리기</button><button data-up="vid,${i}">영상 올리기</button></div>
+    <button class="wide" data-up="alt,${i}">시안 여러 장 올리기 (보는 사람이 바꿔 가며 봄)</button>
+    ${(s.alts||[]).length?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin:6px 0">${s.alts.map((a,k)=>`<button data-alt="${i},${k}" class="${s.src==='img'&&+s.pick===k?'on':''}" style="padding:4px 9px;font-size:12px">${esc(a.n)}</button>`).join('')}<button class="x" data-altclr="${i}" style="font-size:12px">시안 비우기</button></div>`:''}
     <div class="row two">${num(o('mx'),'픽셀맵 위치 x px',64)}${num(o('my'),'픽셀맵 위치 y px',64)}</div>
     <div class="note" style="margin:0">1m당 가로 ${dx}px · 세로 ${dy}px${Math.abs(dx-dy)>2?' <span style="color:#ffb347">(가로·세로 밀도가 달라 그림이 늘어나 보일 수 있음)</span>':''}${+s.grid?` · 500×500 캐비닛 약 ${Math.round((+s.w||0)/.5)*Math.round((+s.h||0)/.5)}장`:''}${s.src==='video'?'<br><span style="color:#ffb347">영상은 이 PC에서만 재생됩니다. 공유 링크에는 첫 장면 사진이 들어갑니다.</span>'+(VIDS[s.vid]?'':'<br><span style="color:#ff6b6b">다시 열어서 영상 파일이 빠졌습니다 — 첫 장면만 보입니다.</span>'):''}</div></div>`}).join('')||'<div class="note">위 「공간 만들기」에서 하나를 고르거나 면을 추가하세요.</div>'}
   <div class="sub" style="margin-top:10px">화면에서 면을 눌러 고른 뒤 끌거나 방향키(10cm, Shift 50cm, ⌥ 1cm)로 옮깁니다.</div>`;
@@ -290,6 +295,9 @@ async function upload(file){const [k,i]=mUp||[],s=S.surfaces[+i];if(!s)return;
       s.vimg=fitJpeg(v,v.videoWidth,v.videoHeight,null,s.px,s.py);if(VIDS[id]){VIDS[id].tex.dispose();URL.revokeObjectURL(VIDS[id].v.src)}
       const t=new THREE.VideoTexture(v);t.encoding=THREE.sRGBEncoding;VIDS[id]={v,tex:t};s.vid=id;s.src='video';v.play().catch(()=>{});say('영상을 넣었습니다. 이 PC에서만 재생되고, 공유 링크에는 첫 장면 사진이 들어갑니다.')}
     panel();build()}catch(e){say('파일을 읽지 못했습니다. 다른 파일로 해 보세요.')}}
+async function addAlts(files){const i=+mUp[1],s=S.surfaces[i];if(!s)return;s.alts=s.alts||[];
+  try{for(const f of files.slice(0,6)){const bm=await createImageBitmap(f);s.alts.push({n:'시안 '+(s.alts.length+1),img:fitJpeg(bm,bm.width,bm.height,null,s.px,s.py)})}pickAlt(i,s.alts.length-files.slice(0,6).length);
+    say(`${MKIND[s.kind]} ${i+1}에 시안 ${s.alts.length}장을 넣었습니다. 보기 화면 위쪽에서 바꿔 볼 수 있습니다.`);panel();build()}catch(e){say('그림을 읽지 못했습니다.')}}
 async function pixelMap(file){try{const bm=await createImageBitmap(file),k=bm.width/3840;let n=0;
     S.surfaces.forEach(s=>{const sx=(+s.mx||0)*k,sy=(+s.my||0)*k,sw=(+s.px||0)*k,sh=(+s.py||0)*k;if(sw<8||sh<8||sx+sw>bm.width+1||sy+sh>bm.height+1)return;s.img=fitJpeg(bm,bm.width,bm.height,[sx,sy,sw,sh],s.px,s.py);s.src='img';n++});
     say(n?`픽셀맵(${bm.width}×${bm.height})을 면 ${n}개에 나눠 넣었습니다.`:'픽셀맵 안에 들어가는 면이 없습니다. 면마다 「픽셀맵 위치」와 해상도를 확인해 주세요.');panel();build()}catch(e){say('픽셀맵 그림을 읽지 못했습니다.')}}
@@ -316,7 +324,7 @@ document.addEventListener('input',e=>{const p=e.target.dataset.p;if(!p)return;co
   set(p,v);if(/^surfaces\.\d+\.(px|py|w|h)$/.test(p)&&e.target.tagName!=='SELECT'){build();return}
   if(e.target.tagName==='SELECT'||/^space\./.test(p))panel();build()});
 document.addEventListener('change',async e=>{const t=e.target;
-  if(t.id==='mfile'&&t.files[0])upload(t.files[0]);if(t.id==='mapfile'&&t.files[0])pixelMap(t.files[0]);
+  if(t.id==='mfile'&&t.files[0]){if(mUp&&mUp[0]==='alt')addAlts([...t.files]);else upload(t.files[0])}if(t.id==='mapfile'&&t.files[0])pixelMap(t.files[0]);
   if(/^surfaces\.\d+\.(px|py|w|h)$/.test(t.dataset.p||''))panel();
   if(t.id==='load'&&t.value){try{const r=await fetch('api/scenes/'+encodeURIComponent(t.value)+'?kind=media');if(!r.ok)throw 0;S=fixState(await r.json());sceneName=t.value;view='out';say(`「${t.value}」을 불러왔습니다.`);panel();build();applyView()}catch(err){say('불러오지 못했습니다.')}}});
 document.addEventListener('click',async e=>{const t=e.target.closest('button,i')||e.target;
@@ -326,7 +334,9 @@ document.addEventListener('click',async e=>{const t=e.target.closest('button,i')
   if(t.dataset.tpl){if(S.surfaces.length&&!confirm('지금 만든 공간을 비우고 「'+TPL[t.dataset.tpl].n+'」으로 바꿀까요?'))return;useTpl(t.dataset.tpl);sceneName='';selTag='';say('');panel();build();applyView()}
   if(t.dataset.add){const i=newSurface(t.dataset.add);selTag='media:'+i;panel();build()}
   if(t.dataset.del!==undefined){S.surfaces.splice(+t.dataset.del,1);selTag='';chip();panel();build()}
-  if(t.dataset.up){mUp=t.dataset.up.split(',');const f=$('#mfile');f.accept=mUp[0]==='img'?'image/jpeg,image/png,image/webp':'video/*';f.value='';f.click()}
+  if(t.dataset.up){mUp=t.dataset.up.split(',');const f=$('#mfile');f.accept=mUp[0]==='vid'?'video/*':'image/jpeg,image/png,image/webp';f.multiple=mUp[0]==='alt';f.value='';f.click()}
+  if(t.dataset.alt){const [i,k]=t.dataset.alt.split(',').map(Number);pickAlt(i,k);if(!VIEW)panel();bar();build()}
+  if(t.dataset.altclr!==undefined){const s=S.surfaces[+t.dataset.altclr];delete s.alts;delete s.pick;panel();build()}
   if(t.id==='mapbtn'){const f=$('#mapfile');f.value='';f.click()}
   if(t.id==='fresh'){if(!confirm('지금 화면을 비우고 처음부터 시작할까요? (저장해 둔 것은 그대로 남습니다)'))return;S=JSON.parse(JSON.stringify(DEF));sceneName='';selTag='';say('새로 시작했습니다. 「공간 만들기」에서 하나를 고르세요.');panel();build();applyView()}
   if(t.id==='save'){const nm=(S.name||'').trim();if(!nm)return say('이름을 먼저 적어 주세요.');if(SD&&SD.some(x=>x.name===nm)&&nm!==sceneName&&!confirm(`「${nm}」이 이미 있습니다. 덮어쓸까요?`))return;
