@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Forest of Bigdata 부스 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+KR:wght@400;600&display=swap">
+<style>
+/* Layout: full-bleed 3D stage, floating title chip top-left, control dock bottom. Single dark look (exhibition hall at night). */
+:root{
+  --bg:#0b1014; --panel:rgba(14,22,28,.86); --line:#26353f; --fg:#e6f0f2; --muted:#8da3ab;
+  --accent:#5fe3ff; --leaf:#8fd16a;
+  --display:"Space Grotesk","Noto Sans KR",system-ui,sans-serif;
+  --body:"Noto Sans KR",system-ui,-apple-system,sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);overflow:hidden}
+#stage{position:fixed;inset:0}
+canvas{display:block}
+.chip{position:fixed;top:calc(12px + env(safe-area-inset-top,0px));left:max(16px,env(safe-area-inset-left,0px));
+  background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 14px;max-width:calc(100% - 32px);backdrop-filter:blur(6px)}
+.chip h1{font-family:var(--display);font-size:16px;margin:0;letter-spacing:.02em;text-wrap:balance}
+.chip p{margin:4px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+.chip b{color:var(--accent);font-weight:600}
+.dock{position:fixed;left:0;right:0;bottom:0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:0 calc(12px + env(safe-area-inset-bottom,0px));display:flex;justify-content:center;pointer-events:none}
+.bar{pointer-events:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;max-width:980px;backdrop-filter:blur(6px)}
+.grp{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.lbl{font-size:11px;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-right:2px}
+button,.file{font:inherit;font-size:13px;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:hover,.file:hover{border-color:var(--accent)}
+button[aria-pressed="true"]{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+button:focus-visible,.file:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.file input{position:absolute;opacity:0;width:1px;height:1px}
+.file{position:relative}
+#msg{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);color:var(--muted);font-size:13px}
+@media (max-width:560px){.chip p{display:none}.bar{gap:8px}}
+</style>
+
+</head><body>
+<div id="stage"></div>
+<div id="msg">3D 부스를 불러오는 중…</div>
+<div class="chip">
+  <h1>FOREST OF BIGDATA · 미디어 미리보기</h1>
+  <p><b>② 벽면</b> 12×3m · 3072×768px &nbsp;|&nbsp; <b>① 천장</b> 9×3.5m · 2304×896px<br>드래그로 회전, 휠·핀치로 확대. 시점을 고른 뒤 링크를 복사하면 그 시점으로 열립니다.</p>
+</div>
+<div class="dock"><div class="bar">
+  <div class="grp"><span class="lbl">시점</span>
+    <button id="v-out" aria-pressed="true">전경</button>
+    <button id="v-front" aria-pressed="false">벽면 정면</button>
+    <button id="v-eye" aria-pressed="false">관람객</button>
+    <button id="v-up" aria-pressed="false">천장 올려보기</button>
+  </div>
+  <div class="grp"><span class="lbl">천장</span>
+    <button id="c-a" aria-pressed="true">A · 1번 경계선 위</button>
+    <button id="c-b" aria-pressed="false">B · 2번 이미지</button>
+  </div>
+  <div class="grp"><span class="lbl">보기</span>
+    <button id="t-plant" aria-pressed="true">식재</button>
+    <button id="t-spin" aria-pressed="false">자동 회전</button>
+  </div>
+  <div class="grp"><span class="lbl">교체</span>
+    <label class="file">벽면 이미지<input id="f-wall" type="file" accept="image/*"></label>
+    <label class="file">천장 이미지<input id="f-ceil" type="file" accept="image/*"></label>
+  </div>
+</div></div>
+
+<script type="importmap">
+{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+"three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"}}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+
+// ---- 가정 치수 (m) ----
+const BW=12, BD=6, TH=4.2;           // 부스 폭, 깊이, 트러스 높이
+const WALL={w:12,h:3,y0:0.6,z:-BD/2+0.3};
+const CEIL={w:9,d:3.5,y:3.95,z0:-BD/2+0.3};
+
+const stage=document.getElementById('stage');
+const renderer=new THREE.WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.shadowMap.enabled=true;
+stage.appendChild(renderer.domElement);
+const scene=new THREE.Scene();
+scene.background=new THREE.Color(0x1b2329);
+scene.fog=new THREE.Fog(0x1b2329,35,80);
+const camera=new THREE.PerspectiveCamera(50,1,0.05,200);
+const controls=new OrbitControls(camera,renderer.domElement);
+controls.enableDamping=true; controls.maxPolarAngle=Math.PI*0.95; controls.minDistance=0.5; controls.maxDistance=40;
+
+scene.add(new THREE.HemisphereLight(0xeaf4ff,0x2a3a20,1.0));
+const sun=new THREE.DirectionalLight(0xffffff,1.3); sun.position.set(9,15,12); sun.castShadow=true;
+sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-14,right:14,top:14,bottom:-14}); scene.add(sun);
+const rnd=(a,b)=>a+Math.random()*(b-a);
+function ctex(w,h,draw,rep){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;if(rep){t.wrapS=t.wrapT=THREE.RepeatWrapping;}t.anisotropy=8;return t;}
+
+// ---- 바닥: 전시장, 인조잔디, 목재 데크 테두리 ----
+const hall=new THREE.Mesh(new THREE.PlaneGeometry(80,80),new THREE.MeshStandardMaterial({color:0x2a3238,roughness:.9}));
+hall.rotation.x=-Math.PI/2; hall.receiveShadow=true; scene.add(hall);
+const grassTex=ctex(256,256,(g,w,h)=>{g.fillStyle='#4f8a34';g.fillRect(0,0,w,h);for(let i=0;i<5000;i++){g.fillStyle=`hsl(${95+rnd(-12,12)},${45+rnd(0,20)}%,${28+rnd(0,18)}%)`;g.fillRect(rnd(0,w),rnd(0,h),1.5,rnd(2,5));}},true);
+grassTex.repeat.set(6,3);
+const grass=new THREE.Mesh(new THREE.BoxGeometry(BW,0.1,BD),new THREE.MeshStandardMaterial({map:grassTex,roughness:1}));
+grass.position.y=0.05; grass.receiveShadow=true; scene.add(grass);
+const deckMat=new THREE.MeshStandardMaterial({color:0xa9794c,roughness:.8});
+[[0,BD/2+0.2,BW+0.8,0.4],[BW/2+0.2,0,0.4,BD],[-BW/2-0.2,0,0.4,BD]].forEach(([x,z,w,d])=>{const m=new THREE.Mesh(new THREE.BoxGeometry(w,0.14,d),deckMat);m.position.set(x,0.07,z);m.receiveShadow=true;scene.add(m);});
+
+// ---- 흰색 사각 트러스 (격자 텍스처) ----
+const trussTex=ctex(64,256,(g,w,h)=>{g.clearRect(0,0,w,h);g.strokeStyle='#f4f6f7';g.lineWidth=7;g.strokeRect(3,0,w-6,h);g.lineWidth=4;g.beginPath();for(let y=0;y<h;y+=64){g.moveTo(4,y);g.lineTo(w-4,y+32);g.lineTo(4,y+64);}g.stroke();},true);
+function trussMat(len){const t=trussTex.clone();t.needsUpdate=true;t.repeat.set(1,len/0.3);return new THREE.MeshStandardMaterial({map:t,alphaTest:.5,side:THREE.DoubleSide,metalness:.5,roughness:.35});}
+const T=0.3;
+function beam(x1,y1,z1,x2,y2,z2){
+  const len=Math.hypot(x2-x1,y2-y1,z2-z1);
+  const g=new THREE.BoxGeometry(T,T,len);
+  // 박스의 긴 축(z)에 텍스처 v가 가도록 UV 회전
+  const uv=g.attributes.uv,n=g.attributes.normal;
+  for(let i=0;i<uv.count;i++){if(Math.abs(n.getZ(i))<.5){const u=uv.getX(i),v=uv.getY(i);if(Math.abs(n.getY(i))>.5)uv.setXY(i,u,v);else uv.setXY(i,v,u);}}
+  const m=new THREE.Mesh(g,trussMat(len));
+  m.position.set((x1+x2)/2,(y1+y2)/2,(z1+z2)/2); m.lookAt(x2,y2,z2); m.castShadow=true; scene.add(m);
+}
+const BX=[-BW/2,-BW/4,0,BW/4,BW/2];
+for(const x of BX) beam(x,0,-BD/2,x,TH,-BD/2);            // 기둥: 뒤쪽(벽면 쪽)만. 앞쪽 기둥은 제거
+beam(-BW/2,TH,-BD/2,BW/2,TH,-BD/2); beam(-BW/2,TH,BD/2,BW/2,TH,BD/2);
+for(const x of BX) beam(x,TH,-BD/2,x,TH,BD/2);
+beam(-BW/2,TH,0,BW/2,TH,0);
+
+// ---- LED 면 ----
+const loader=new THREE.TextureLoader();
+function tex(src){const t=loader.load(src); t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=8; return t;}
+const ledBack=new THREE.MeshStandardMaterial({color:0x15191c,roughness:.6});
+const wallMat=new THREE.MeshBasicMaterial({map:tex('wall.jpg'),toneMapped:false});
+const wall=new THREE.Mesh(new THREE.PlaneGeometry(WALL.w,WALL.h),wallMat);
+wall.position.set(0,WALL.y0+WALL.h/2,WALL.z); scene.add(wall);
+const wallBox=new THREE.Mesh(new THREE.BoxGeometry(WALL.w,WALL.h+WALL.y0,0.25),ledBack);
+wallBox.position.set(0,(WALL.h+WALL.y0)/2,WALL.z-0.13); scene.add(wallBox);
+const ceilTex={a:tex('ceil_a.jpg'),b:tex('ceil_b.jpg')};
+const ceilMat=new THREE.MeshBasicMaterial({map:ceilTex.a,toneMapped:false});
+const ceil=new THREE.Mesh(new THREE.PlaneGeometry(CEIL.w,CEIL.d),ceilMat);
+ceil.rotation.x=Math.PI/2;                // 아래를 향함, 이미지 아랫변(경계선)이 벽 쪽
+ceil.position.set(0,CEIL.y,CEIL.z0+CEIL.d/2); scene.add(ceil);
+const ceilBox=new THREE.Mesh(new THREE.BoxGeometry(CEIL.w,0.12,CEIL.d),ledBack);
+ceilBox.position.set(0,CEIL.y+0.07,CEIL.z0+CEIL.d/2); scene.add(ceilBox);
+const wl=new THREE.PointLight(0x6fb8ff,5,8); wl.position.set(0,2,WALL.z+1.4); scene.add(wl);
+const cl=new THREE.PointLight(0x8ab6ff,4,6); cl.position.set(0,CEIL.y-0.8,CEIL.z0+CEIL.d/2); scene.add(cl);
+
+// ---- 그린 캐노피 (LED 바깥 천장 부분) ----
+const leafTex=ctex(256,256,(g,w,h)=>{g.fillStyle='#4f9a2c';g.fillRect(0,0,w,h);for(let i=0;i<900;i++){g.fillStyle=`hsl(${80+rnd(-15,20)},${55+rnd(0,25)}%,${30+rnd(0,35)}%)`;g.beginPath();g.ellipse(rnd(0,w),rnd(0,h),rnd(3,9),rnd(2,5),rnd(0,3),0,7);g.fill();}},true);
+const plants=new THREE.Group(); scene.add(plants);
+function canopy(x0,x1,z0,z1){const w=x1-x0,d=z1-z0;const t=leafTex.clone();t.needsUpdate=true;t.repeat.set(w/2,d/2);
+  const m=new THREE.Mesh(new THREE.PlaneGeometry(w,d),new THREE.MeshStandardMaterial({map:t,side:THREE.DoubleSide,roughness:1,emissive:0x2c4a10,emissiveIntensity:.35}));
+  m.rotation.x=Math.PI/2;m.position.set((x0+x1)/2,TH-0.05,(z0+z1)/2);plants.add(m);}
+const cz1=CEIL.z0+CEIL.d;
+canopy(-BW/2,BW/2,cz1,BD/2); canopy(-BW/2,-CEIL.w/2,-BD/2,cz1); canopy(CEIL.w/2,BW/2,-BD/2,cz1);
+
+// ---- 덩굴 (트러스를 감싼 잎) ----
+const leafMats=[0x2f6b25,0x3e8a2e,0x5a9e3a,0x76b043].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:1,flatShading:true}));
+const blob=new THREE.IcosahedronGeometry(1,0);
+function leaf(x,y,z,s){const m=new THREE.Mesh(blob,leafMats[Math.floor(rnd(0,4))]);m.scale.setScalar(s);m.position.set(x,y,z);m.rotation.set(rnd(0,3),rnd(0,3),0);m.castShadow=true;plants.add(m);}
+for(let x=-BW/2;x<=BW/2;x+=0.35){leaf(x,TH+rnd(.05,.25),BD/2+rnd(-.15,.15),rnd(.18,.3));leaf(x,TH+rnd(.05,.25),-BD/2+rnd(-.15,.15),rnd(.15,.26));}
+for(const x of [-BW/2,BW/2]) for(let z=-BD/2;z<=BD/2;z+=0.35) leaf(x+rnd(-.15,.15),TH+rnd(.05,.25),z,rnd(.16,.28));
+for(const x of BX) for(let y=0.3;y<TH;y+=0.4) leaf(x+rnd(-.18,.18),y,-BD/2+rnd(.05,.25),rnd(.1,.2));   // 기둥 감은 덩굴
+
+// ---- 등나무 (앞쪽·좌우 보에 늘어진 꽃) ----
+const wisMats=[0x9b7fd4,0xc9b6ee,0xf1ecfa,0xb59be6,0xd8e8b0].map(c=>new THREE.MeshStandardMaterial({color:c,roughness:.85}));
+function wisteria(x,z){const l=rnd(.7,1.9);const r=rnd(.07,.12);const m=new THREE.Mesh(new THREE.ConeGeometry(r,l,6),wisMats[Math.floor(rnd(0,5))]);
+  m.rotation.x=Math.PI;m.position.set(x,TH-0.1-l/2,z);m.castShadow=true;plants.add(m);}
+for(let x=-BW/2+0.2;x<=BW/2;x+=0.17) wisteria(x,BD/2+rnd(-.2,.2));
+for(let z=-BD/2+0.6;z<=BD/2;z+=0.2) wisteria(BW/2+rnd(-.2,.2),z);
+for(let z=1;z<=BD/2;z+=0.25) wisteria(-BW/2+rnd(-.2,.2),z);
+
+// ---- 나무와 관목 ----
+const trunkMat=new THREE.MeshStandardMaterial({color:0x5b4130,roughness:.9});
+function tree(x,z,s=1){const g=new THREE.Group();
+  const tr=new THREE.Mesh(new THREE.CylinderGeometry(.05*s,.09*s,1.6*s,6),trunkMat);tr.position.y=.8*s;tr.castShadow=true;g.add(tr);
+  for(let i=0;i<7;i++){const b=new THREE.Mesh(blob,leafMats[i%4]);b.scale.setScalar(rnd(.3,.5)*s);b.position.set(rnd(-.4,.4)*s,(1.6+rnd(0,.9))*s,rnd(-.4,.4)*s);b.castShadow=true;g.add(b);}
+  g.position.set(x,0.1,z);plants.add(g);}
+for(const [x,z,s] of [[-5.2,-2.2,.9],[-4.3,-2.4,.8],[3.6,-2.2,.9],[4.6,-2.3,1.1],[5.4,-1.2,1.0],[5.3,0.6,1.2],[4.8,2.1,.9],[2.6,2.5,.7],[-1.5,2.6,.6]]) tree(x+rnd(-.1,.1),z,s);
+for(let i=0;i<40;i++){const z=rnd(0,1)<.6?BD/2-rnd(.1,.5):-BD/2+rnd(.4,.8);const x=rnd(-5.8,5.8);if(z>0&&x>-4.5&&x<1.8&&rnd(0,1)<.6)continue;leaf(x,0.25,z,rnd(.2,.38));}
+// 흰색 구형 조명
+const ballMat=new THREE.MeshStandardMaterial({color:0xffffff,emissive:0xfff4dc,emissiveIntensity:.9});
+for(const [x,z,r] of [[1.2,2.7,.22],[2.0,2.4,.3],[3.0,2.8,.18],[4.1,2.6,.26],[5.0,1.3,.2]]){const m=new THREE.Mesh(new THREE.SphereGeometry(r,20,14),ballMat);m.position.set(x,0.1+r,z);plants.add(m);}
+
+// ---- 오른쪽 끝 흰 가벽 ----
+const white=new THREE.MeshStandardMaterial({color:0xf2f2ef,roughness:.8});
+const sideWall=new THREE.Mesh(new THREE.BoxGeometry(0.15,3,4.2),white);sideWall.position.set(BW/2-0.1,1.5,-0.9);sideWall.castShadow=true;scene.add(sideWall);
+
+// ---- 팔레트 포스터 스탠드 (오른쪽 구간) ----
+const palletMat=new THREE.MeshStandardMaterial({color:0xb88a58,roughness:.9});
+const posterTex=ctex(256,400,(g,w,h)=>{g.fillStyle='#f5f8f7';g.fillRect(0,0,w,h);g.fillStyle='#2bb3a8';g.fillRect(0,0,w,90);g.fillStyle='#d6eeea';for(let i=0;i<6;i++)g.fillRect(24,120+i*42,w-48-rnd(0,80),16);g.fillStyle='#2bb3a8';g.fillRect(24,h-70,w-48,40);});
+const posterMat=new THREE.MeshStandardMaterial({map:posterTex,roughness:.7});
+function pallet(x,z,ry){const g=new THREE.Group();
+  for(let i=0;i<5;i++){const s=new THREE.Mesh(new THREE.BoxGeometry(1.2,.12,.04),palletMat);s.position.set(0,.2+i*.38,0);g.add(s);}
+  for(const px of [-.55,.55]){const p=new THREE.Mesh(new THREE.BoxGeometry(.08,1.9,.08),palletMat);p.position.set(px,.95,-.04);g.add(p);}
+  const pst=new THREE.Mesh(new THREE.PlaneGeometry(.75,1.15),posterMat);pst.position.set(0,1.05,.03);g.add(pst);
+  g.position.set(x,0.1,z);g.rotation.y=ry;g.traverse(o=>{o.castShadow=true});scene.add(g);}
+pallet(4.0,-1.5,-.3); pallet(5.2,-0.2,-Math.PI/2+.1);
+
+// ---- 입구 목재 아치 게이트 ----
+const woodTex=ctex(256,256,(g,w,h)=>{g.fillStyle='#8b5a33';g.fillRect(0,0,w,h);for(let i=0;i<70;i++){g.strokeStyle=`rgba(${rnd(60,110)},${rnd(35,60)},${rnd(20,35)},.5)`;g.lineWidth=rnd(1,3);g.beginPath();const y=rnd(0,h);g.moveTo(0,y);g.bezierCurveTo(w*.3,y+rnd(-6,6),w*.6,y+rnd(-6,6),w,y+rnd(-4,4));g.stroke();}},true);
+const wood=new THREE.MeshStandardMaterial({map:woodTex,roughness:.8});
+const GW=5.6,GH=5.2,GT=0.9,OW=3.6,OH=3.4;
+const gs=new THREE.Shape();gs.moveTo(-GW/2,0);gs.lineTo(GW/2,0);gs.lineTo(GW/2,GH);gs.lineTo(-GW/2,GH);gs.closePath();
+const hole=new THREE.Path();hole.moveTo(-OW/2,0);hole.lineTo(OW/2,0);hole.lineTo(OW/2,OH);hole.absarc(0,OH,OW/2,0,Math.PI,false);hole.lineTo(-OW/2,0);gs.holes.push(hole);
+const gateGeo=new THREE.ExtrudeGeometry(gs,{depth:GT,bevelEnabled:false});
+const gate=new THREE.Mesh(gateGeo,wood);gate.rotation.y=-Math.PI/2;gate.position.set(-BW/2-0.15,0.1,0);gate.castShadow=true;scene.add(gate);
+// 게이트 정면 사인
+const signTex=ctex(1400,180,(g,w,h)=>{g.clearRect(0,0,w,h);g.fillStyle='#ffffff';g.font='bold 128px "Space Grotesk",Impact,sans-serif';g.textAlign='center';g.textBaseline='middle';g.shadowColor='rgba(0,0,0,.45)';g.shadowBlur=8;g.fillText('FOREST OF BIGDATA',w/2,h/2+6);});
+const sign=new THREE.Mesh(new THREE.PlaneGeometry(4.9,0.63),new THREE.MeshBasicMaterial({map:signTex,transparent:true}));
+sign.rotation.y=-Math.PI/2;sign.position.set(-BW/2-0.15-GT-0.01,OH+OW/2+0.1>GH-0.4?GH-0.45:(OH+OW/2+GH)/2+0.05,0);scene.add(sign);
+for(let z=-GW/2;z<=GW/2;z+=0.3) leaf(-BW/2-0.6+rnd(-.3,.3),GH+0.1+rnd(0,.2),z,rnd(.2,.32));
+for(let z=-GW/2;z<=GW/2;z+=0.22) wisteria2(-BW/2-0.15-GT-0.05,z);
+function wisteria2(x,z){const l=rnd(.3,.9);const m=new THREE.Mesh(new THREE.ConeGeometry(.08,l,5),leafMats[Math.floor(rnd(0,4))]);m.rotation.x=Math.PI;m.position.set(x,GH-l/2,z);plants.add(m);}
+
+// ---- 원형 목재 안내데스크 + 라운지 의자 ----
+const desk=new THREE.Mesh(new THREE.CylinderGeometry(1.0,1.0,1.0,40,1,true,Math.PI*.15,Math.PI*1.4),wood);
+desk.material=wood;desk.position.set(-4.0,0.6,1.4);desk.rotation.y=Math.PI*.9;desk.castShadow=true;scene.add(desk);
+const deskTop=new THREE.Mesh(new THREE.RingGeometry(0.75,1.08,40,1,Math.PI*.15,Math.PI*1.4),new THREE.MeshStandardMaterial({color:0xd8c4a6,side:THREE.DoubleSide}));
+deskTop.rotation.x=-Math.PI/2;deskTop.rotation.z=Math.PI*.9;deskTop.position.set(-4.0,1.11,1.4);scene.add(deskTop);
+function chair(x,z,ry){const g=new THREE.Group();const seat=new THREE.Mesh(new THREE.BoxGeometry(.6,.08,.7),wood);seat.position.y=.38;g.add(seat);
+  const back=new THREE.Mesh(new THREE.BoxGeometry(.6,.7,.06),wood);back.position.set(0,.7,-.38);back.rotation.x=-.35;g.add(back);
+  for(const [a,b] of [[-.27,-.3],[.27,-.3],[-.27,.3],[.27,.3]]){const l=new THREE.Mesh(new THREE.BoxGeometry(.05,.38,.05),wood);l.position.set(a,.19,b);g.add(l);}
+  g.position.set(x,0.1,z);g.rotation.y=ry;g.traverse(o=>{o.castShadow=true});scene.add(g);}
+chair(-5.1,-0.6,.6);chair(-4.3,-1.2,.2);chair(-2.6,1.9,2.6);
+
+// ---- COSS 네온 로고 ----
+const cossTex=ctex(512,512,(g,w,h)=>{g.clearRect(0,0,w,h);g.shadowColor='#3ff0ff';g.shadowBlur=28;g.strokeStyle='#7ff6ff';g.lineWidth=14;
+  g.beginPath();g.arc(w/2,h/2,200,0,7);g.stroke();g.lineWidth=8;g.beginPath();g.arc(w/2,h/2,160,0,7);g.stroke();
+  g.fillStyle='#bafbff';g.font='bold 120px "Space Grotesk",sans-serif';g.textAlign='center';g.textBaseline='middle';g.fillText('COSS',w/2,h/2+20);
+  g.lineWidth=6;g.beginPath();g.moveTo(w/2-90,h/2-80);g.lineTo(w/2+90,h/2-80);g.stroke();});
+const cossMat=new THREE.MeshBasicMaterial({map:cossTex,transparent:true,side:THREE.DoubleSide,toneMapped:false,depthWrite:false});
+function coss(x,y,z,ry,s){const m=new THREE.Mesh(new THREE.PlaneGeometry(s,s),cossMat);m.position.set(x,y,z);m.rotation.y=ry;scene.add(m);
+  const l=new THREE.PointLight(0x3ff0ff,1.5,3);l.position.set(x,y,z);scene.add(l);}
+coss(-BW/2+0.4,2.6,BD/2-0.2,Math.PI/4,1.7);
+coss(-BW/2-0.2,2.0,-GW/2-0.1,-Math.PI/2,1.3);
+
+// 사람 (1.7m, 스케일 참고)
+const person=new THREE.Group();
+const body=new THREE.Mesh(new THREE.CapsuleGeometry(.2,1.1,4,8),new THREE.MeshStandardMaterial({color:0xdadada}));
+body.position.y=.75; person.add(body);
+const head=new THREE.Mesh(new THREE.SphereGeometry(.13,12,10),body.material); head.position.y=1.57; person.add(head);
+person.position.set(2.9,0.1,0.9); scene.add(person);
+
+// 카메라 프리셋
+const views={
+  out:{p:[-14,7.5,13],t:[-0.5,1.8,0]},
+  front:{p:[0,2.1,10],t:[0,2.1,WALL.z]},
+  eye:{p:[0.6,1.6,2.6],t:[0,2.2,WALL.z]},
+  up:{p:[0,1.6,1.2],t:[0,CEIL.y,CEIL.z0+CEIL.d*0.35]},
+};
+let anim=null;
+function go(name,instant){
+  const v=views[name];
+  const from={p:camera.position.clone(),t:controls.target.clone()};
+  const to={p:new THREE.Vector3(...v.p),t:new THREE.Vector3(...v.t)};
+  if(instant||matchMedia('(prefers-reduced-motion: reduce)').matches){camera.position.copy(to.p);controls.target.copy(to.t);anim=null;return;}
+  anim={from,to,s:performance.now()};
+  curView=name; mark(); syncHash();
+}
+let curView='out', curCeil='a';
+function mark(){document.querySelectorAll('[id^="v-"]').forEach(b=>b.setAttribute('aria-pressed',b.id==='v-'+curView));}
+function syncHash(){const h=curView+(curCeil==='b'?'-b':'');try{if(location.hash.slice(1)!==h)history.replaceState(null,'','#'+h);}catch(e){}}
+function fromHash(instant){const h=(location.hash||'').slice(1);const [v,c]=h.split('-');
+  if(c==='b'||c===undefined&&h) setCeil(c==='b'?'b':'a');
+  if(views[v]){curView=v;mark();if(instant){const o=views[v];camera.position.set(...o.p);controls.target.set(...o.t);}else go(v);}}
+addEventListener('hashchange',()=>fromHash(false));
+for(const n of Object.keys(views)) document.getElementById('v-'+n).onclick=()=>go(n);
+go('out',true);
+setTimeout(()=>fromHash(true),0);
+
+function setCeil(k){ceilMat.map=ceilTex[k];ceilMat.needsUpdate=true;curCeil=k;syncHash();
+  document.getElementById('c-a').setAttribute('aria-pressed',k==='a');document.getElementById('c-b').setAttribute('aria-pressed',k==='b');}
+document.getElementById('c-a').onclick=()=>setCeil('a');
+document.getElementById('c-b').onclick=()=>setCeil('b');
+const tp=document.getElementById('t-plant');
+tp.onclick=()=>{plants.visible=!plants.visible;tp.setAttribute('aria-pressed',plants.visible);};
+const ts=document.getElementById('t-spin');
+ts.onclick=()=>{controls.autoRotate=!controls.autoRotate;controls.autoRotateSpeed=0.8;ts.setAttribute('aria-pressed',controls.autoRotate);};
+
+function fileTo(input,apply){input.addEventListener('change',()=>{const f=input.files[0];if(!f)return;
+  const url=URL.createObjectURL(f);loader.load(url,t=>{t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=8;apply(t);});});}
+fileTo(document.getElementById('f-wall'),t=>{wallMat.map=t;wallMat.needsUpdate=true;});
+fileTo(document.getElementById('f-ceil'),t=>{ceilTex.custom=t;ceilMat.map=t;ceilMat.needsUpdate=true;
+  document.getElementById('c-a').setAttribute('aria-pressed',false);document.getElementById('c-b').setAttribute('aria-pressed',false);});
+
+function resize(){const w=stage.clientWidth,h=stage.clientHeight;renderer.setSize(w,h);camera.aspect=w/h;camera.updateProjectionMatrix();}
+addEventListener('resize',resize); resize();
+document.getElementById('msg').hidden=true;
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+renderer.setAnimationLoop(now=>{
+  if(anim){const k=Math.min(1,(now-anim.s)/900),e=ease(k);
+    camera.position.lerpVectors(anim.from.p,anim.to.p,e);controls.target.lerpVectors(anim.from.t,anim.to.t,e);if(k===1)anim=null;}
+  controls.update(); renderer.render(scene,camera);
+});
+</script>
+
+</body></html>
