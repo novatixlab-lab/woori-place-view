@@ -34,11 +34,13 @@
   #bar .sp{flex:1}
   #view{position:absolute;inset:0}
   canvas{display:block}
-  #palette{display:none;position:absolute;right:12px;top:56px;z-index:3;width:190px;background:rgba(20,23,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:calc(100% - 80px);overflow:auto}
-  #palette.open{display:block}#palette h3{font-size:12px;color:var(--lime);margin:6px 0 6px}
+  #palette{display:none;position:absolute;right:12px;top:56px;z-index:3;width:216px;background:rgba(20,23,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:calc(100% - 80px);overflow:auto}
+  #palette.open{display:block}#palette summary{font-size:12.5px;color:var(--lime);margin:6px 0;cursor:pointer;font-weight:700}#palette details{border-top:1px solid var(--line)}#palette details:first-of-type{border-top:0}
+  .pi.lk{cursor:pointer;border-style:dashed;color:var(--dim)}.pi.lk span{color:var(--lime);width:12px;flex:none}
   .pi{display:flex;align-items:center;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:8px;margin-bottom:5px;font-size:13px;cursor:grab;user-select:none;touch-action:none}.pi:hover,.pi.armed{border-color:var(--lime)}
   .pi i{width:12px;height:12px;border-radius:50%;background:#fff;flex:none}.pi i.sq{border-radius:2px;background:#9aa0a8}
   #ghost{position:fixed;z-index:50;pointer-events:none;background:var(--lime);color:#0B0D1E;font-weight:700;font-size:12.5px;padding:5px 10px;border-radius:999px;transform:translate(-50%,-150%)}
+  #warnchip{display:none;position:absolute;left:12px;bottom:12px;z-index:2;color:#0B0D1E;font-weight:700;font-size:13px;padding:6px 12px;border-radius:999px;cursor:pointer}body.viewer #warnchip{display:none!important}
   #selchip{display:none;position:absolute;left:12px;top:56px;z-index:2;background:var(--lime);color:#0B0D1E;font-weight:700;font-size:13px;padding:5px 12px;border-radius:999px}
   .pick{outline:2px solid var(--lime);outline-offset:3px;border-radius:8px;transition:outline-color .2s}
   body:not(.viewer) #frame{cursor:grab}
@@ -75,7 +77,7 @@
 <body>
 <div id="app">
   <div id="panel"></div>
-  <div id="main"><div id="bar"></div><div id="view"></div><div id="frame"><span id="framecap"></span></div><div id="vtitle"></div><div id="palette"></div><div id="selchip"></div></div>
+  <div id="main"><div id="bar"></div><div id="view"></div><div id="frame"><span id="framecap"></span></div><div id="vtitle"></div><div id="palette"></div><div id="warnchip" title="눌러서 점검 내용 보기"></div><div id="selchip"></div></div>
 </div>
 <meta name="robots" content="noindex,nofollow">
 <script>window.PLACE_PUBLIC=1</script>
@@ -89,12 +91,14 @@ const S = {
   venue:{w:20,d:11,h:5},
   unit:'1.2x1.2',
   tiers:[{name:'뒷줄',cols:4,rows:1,h:60},{name:'앞줄',cols:4,rows:2,h:20}],
-  screen:{n:4,h:2.56,cw:0,kind:'fold',sup:'none',text:'행사 타이틀'},
+  screen:{n:4,h:2.56,cw:0,kind:'fold',sup:'none',off:1,text:'행사 타이틀'},
   presenter:{mode:'stand',dist:2},
+  people:[{role:'발표자',mode:'stand',x:0,tw:1800}],
   when:{date:'',note:''},
-  rigs:[],lights:[],
+  rigs:[],lights:[],boards:[],lines:[],consoles:[],
   seats:{rows:4,cols:12,chair:-1,layout:'theater',angle:15,tableD:1.8,perTable:10,rise:30,back:3},
   items:[],
+  media:{surfaces:[]},
   cams:[{name:'CAM 1',x:0,dist:5.5,h:1.7,lens:'xa20',f:30,ext:0,shot:''},{name:'CAM 2',x:-6,dist:3,h:1.7,lens:'xa20',f:15,ext:0,shot:''},{name:'CAM 3',x:6,dist:3,h:1.7,lens:'xa20',f:15,ext:0,shot:''}]
 };
 const UNITS={'1.2x1.2':[1.2,1.2,'1,200 × 1,200mm'],'1.82x0.91':[1.82,0.91,'1,820 × 910mm']};
@@ -105,6 +109,7 @@ let view='3d',_pb=false;
 const whenTxt=()=>{const w=S.when||{};if(!w.date&&!w.note)return '';let d='';if(w.date){const t=new Date(w.date+'T00:00:00');d=isNaN(t)?w.date:`${t.getFullYear()}년 ${t.getMonth()+1}월 ${t.getDate()}일(${'일월화수목금토'[t.getDay()]})`}return [d,w.note].filter(Boolean).join(' · ')};
 // ── 공유(보기 전용): 배치 내용을 주소 뒤(#v=...)에 담는다. 서버에 저장하지 않으므로 어느 웹 주소에 올려도 열린다.
 const VIEW=location.hash.startsWith('#v=')||location.hash.startsWith('#s=');
+const HPAY=location.hash.slice(3).split('&')[0],HOPT=new URLSearchParams(location.hash.split('&').slice(1).join('&'));   // 링크 뒤 &view=media 같은 보기 설정
 const SHARE_BASE='https://novatixlab-lab.github.io/woori-place-view/';   // 보기 전용 화면을 올려 둔 주소 (tools/build_public.py 로 만든 묶음)
 const b64u=u8=>{let t='';u8.forEach(b=>t+=String.fromCharCode(b));return btoa(t).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')};
 const unb64u=t=>Uint8Array.from(atob(t.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
@@ -124,7 +129,22 @@ async function unpackScene(t){const u8=unb64u(t.slice(1));return JSON.parse(new 
 const SW=9.59;
 const SUP={layher:{n:'레이어(레이허)',bay:2.07,lift:2,dep:1.09},asiba:{n:'아시바(강관 비계)',bay:1.829,lift:1.7,dep:1.219}};
 const LIGHTS={mspot:{n:'무빙 스팟',beam:14},mwash:{n:'무빙 워시',beam:36},par:{n:'LED 파',beam:30},profile:{n:'프로파일(엘립소이달)',beam:19},fresnel:{n:'프레넬',beam:42},blinder:{n:'블라인더',beam:65},bar:{n:'LED 바',beam:55}};
-const RIGS={batten:{n:'바턴 (파이프)'},truss:{n:'트러스 290각'},layher:{n:'레이어 타워'}};
+const RIGS={batten:{n:'바턴 (파이프)'},truss:{n:'트러스 290각'},layher:{n:'레이어 타워'},frame:{n:'LED 뒤 구조물'},tbar:{n:'T바 스탠드'}};
+const TEAMC={음향:'#4fc3ff',조명:'#ffb347',영상:'#b388ff',중계:'#D4F53C',진행:'#ff5fa2'};
+const RISERS=[0,600,800,1000,1200,1500];
+// LED 뒤에 세우는 구조물: 칸 길이·폭·단 높이를 규격에서 고른다 (m)
+const FR={layher:{n:'레이어(레이허)',bay:[0.73,1.09,1.57,2.07,2.57,3.07],dep:[0.73,1.09,1.57,2.07],lift:[1,1.5,2],d:[2.07,1.09,2]},
+  asiba:{n:'아시바(강관 비계)',bay:[1.219,1.524,1.829],dep:[0.914,1.219],lift:[1.7],d:[1.829,1.219,1.7]}};
+const frDim=r=>{const W=r2((+r.bays||1)*(+r.bay||2.07)),Hh=r2((+r.lifts||1)*(+r.lift||2)),D=+r.dep||1.09;return {W,Hh,D}};
+function newFrame(sys,x,z){const f=FR[sys]||FR.layher,L=G.led||{sw:6,top:3};return {kind:'frame',sys:FR[sys]?sys:'layher',x,z,rot:0,bay:f.d[0],dep:f.d[1],lift:f.d[2],bays:Math.max(1,Math.ceil((L.sw||6)/f.d[0])),lifts:Math.max(1,Math.ceil((L.top||3)/f.d[2]))}}
+const LINES={power:{n:'전원 간선',c:'#ff7a3d'},signal:{n:'신호·영상 라인',c:'#4fc3ff'},path:{n:'입장 동선',c:'#5ff0c0'}};
+const COVERS=[['none','마감 없음'],['mat','고무판'],['jacket','옐로우 자켓']];
+// 점검용 통상값 (기종마다 다름 — 실제 사양으로 바꿔 확인)
+const LW={mspot:22,mwash:12,par:4,profile:8,fresnel:6,blinder:5,bar:6},LP={mspot:450,mwash:350,par:150,profile:300,fresnel:300,blinder:650,bar:150};
+const T290=[[4,800],[6,600],[8,400],[10,280],[12,200]];   // 290각 한 스팬에 고르게 걸 때의 참고 한도(kg) — 보수적으로 잡은 값, 제조사 하중표 아님
+const lineLen=l=>l.pts.reduce((t,p,k)=>k?t+Math.hypot(p[0]-l.pts[k-1][0],p[1]-l.pts[k-1][1]):0,0);
+function segX(a,b,c,d){const r=[b[0]-a[0],b[1]-a[1]],q=[d[0]-c[0],d[1]-c[1]],den=r[0]*q[1]-r[1]*q[0];if(Math.abs(den)<1e-9)return null;
+  const t=((c[0]-a[0])*q[1]-(c[1]-a[1])*q[0])/den,u=((c[0]-a[0])*r[1]-(c[1]-a[1])*r[0])/den;return t>=0&&t<=1&&u>=0&&u<=1?[a[0]+r[0]*t,a[1]+r[1]*t]:null}
 const LCOL=['#ffffff','#ffd9a0','#ff5fa2','#4fc3ff','#b388ff','#5ff0c0','#ff6b6b','#D4F53C'];
 const AIMS=[['stage','무대(발표자)'],['led','LED·뒤 벽'],['aud','객석'],['down','바로 아래'],['up','위로']];
 const CAMCOL=['#D4F53C','#ff5fa2','#4fc3ff','#ffb347','#b388ff','#5ff0c0','#ff6b6b','#ffffff'],camCol=(c,i)=>c.color||CAMCOL[i%CAMCOL.length];
@@ -145,12 +165,14 @@ const lensR=c=>{const l=LENSES[c.lens]||LENSES.xa20,k=c.ext&&!l.mft?2:1;return [
 const camF=c=>{const [lo,hi]=lensR(c);return Math.max(lo,Math.min(hi,+c.f||lo))};
 const camFov=c=>2*Math.atan(camSW(c)/(2*camF(c)))*180/Math.PI;
 const zoomPos=c=>{const [lo,hi]=lensR(c);if(hi<=lo)return 0;return Math.round(1000*Math.log(camF(c)/lo)/Math.log(hi/lo))};
-const camAim0=c=>{const sh=SHOTS.find(x=>x[0]===c.shot);return new THREE.Vector3(0,(G.ph||0)+(sh?sh[3]:1.3)-(G.sit?.42:0),G.pz||0)};
+const camAim0=c=>{const sh=SHOTS.find(x=>x[0]===c.shot),P=(G.people||[])[+c.who>=0?+c.who:-1]||G.mainP||{x:0,y:G.ph||0,z:G.pz||0,sit:G.sit};return new THREE.Vector3(P.x,P.y+(sh?sh[3]:1.3)-(P.sit?.42:0),P.z)};
+const PMODES=[['stand','서서 · 보면대'],['podw','포디움 · 넓은 것(900)'],['podn','포디움 · 좁은 것(600)'],['table','테이블에 앉음'],['free','서서 · 아무것도 없이']],ROLEC={사회자:'#ff5fa2',발표자:'#D4F53C'};
+const pName=(p,i)=>{const same=S.people.filter(q=>q.role===p.role);return p.role+(same.length>1?' '+(same.indexOf(p)+1):'')};
 // 발표자를 향한 기본 방향에서 좌우(pan)·위아래(tilt)로 돌린 조준점
 const camAim=c=>{const t=camAim0(c),pan=+c.pan||0,tilt=+c.tilt||0;if(!pan&&!tilt)return t;const p=camPos(c),v=t.clone().sub(p),L=v.length();
   v.applyAxisAngle(new THREE.Vector3(0,1,0),-pan*Math.PI/180);const hz=Math.hypot(v.x,v.z);v.y=Math.tan(Math.atan2(v.y,hz)+tilt*Math.PI/180)*hz;return p.add(v.setLength(L))};
 const camTurn=c=>{const pan=+c.pan||0,tilt=+c.tilt||0;return (pan?`${pan>0?'오른쪽':'왼쪽'} ${Math.abs(pan)}°`:'')+(pan&&tilt?' · ':'')+(tilt?`${tilt>0?'위로':'아래로'} ${Math.abs(tilt)}°`:'')};
-const camBase=c=>G.tierY?G.tierY(c.x,(G.frontZ||0)+c.dist):0;
+const camBase=c=>(G.tierY?G.tierY(c.x,(G.frontZ||0)+c.dist):0)+(+c.riser||0)/1000;   // 객석 단 + 카메라 단 높이
 const camPos=c=>new THREE.Vector3(c.x,c.h+camBase(c),(G.frontZ||0)+c.dist);
 const r1=v=>Math.round(v*10)/10;
 const CAT=(window.CATALOG||[]).map((c,i)=>Object.assign({},c,{id:i,ok:!!(c.w&&c.d&&c.h),sure:c.status==='확인'||c.status==='검색'}));
@@ -186,14 +208,121 @@ function useHall(i,j){const v=VENUES[i],h=v.halls[j];
   $('#vbox').remove();view='3d';panel();build();
 }
 const DEFAULT=JSON.stringify(S);let sceneName='',scenes=[],smsg='';
-function serialize(){const o=JSON.parse(JSON.stringify(S));o.items.forEach(it=>{it.name=CAT[it.id]?CAT[it.id].name:''});o.seats.chairName=CAT[S.seats.chair]?CAT[S.seats.chair].name:'';return o}
+function serialize(lite){const o=JSON.parse(JSON.stringify(S));if(lite)(o.media.surfaces||[]).forEach(s=>{delete s.img;delete s.vimg});/* 긴 링크(#v=)에는 그림을 빼고 이름만 */o.items.forEach(it=>{it.name=CAT[it.id]?CAT[it.id].name:''});o.seats.chairName=CAT[S.seats.chair]?CAT[S.seats.chair].name:'';return o}
 function restore(o){const miss=[];o=JSON.parse(JSON.stringify(o));
   o.items=(o.items||[]).map(it=>{const c=CAT.find(c=>c.name===it.name&&c.ok);if(!c){miss.push(it.name);return null}it.id=c.id;return it}).filter(Boolean);
-  const d=JSON.parse(DEFAULT);o.seats=Object.assign(d.seats,o.seats);o.screen=Object.assign(d.screen,o.screen);o.presenter=Object.assign(d.presenter,o.presenter);o.when=Object.assign(d.when,o.when);o.rigs=o.rigs||[];o.lights=(o.lights||[]).filter(l=>LIGHTS[l.type]);(o.cams||[]).forEach(c=>{if(!c.lens){c.lens='xa20';c.f=c.fov?SW/(2*Math.tan(c.fov*Math.PI/360)):20;c.ext=0;c.shot=''}});const ch=CAT.find(c=>c.name===o.seats.chairName&&c.ok);o.seats.chair=ch?ch.id:-1;
+  const d=JSON.parse(DEFAULT);o.seats=Object.assign(d.seats,o.seats);o.screen=Object.assign(d.screen,o.screen);o.presenter=Object.assign(d.presenter,o.presenter);if(!Array.isArray(o.people))o.people=o.presenter.mode==='none'?[]:[{role:'발표자',mode:o.presenter.mode==='table'?'table':'stand',x:0,tw:1800}];o.when=Object.assign(d.when,o.when);o.rigs=o.rigs||[];o.boards=o.boards||[];o.media={surfaces:(o.media&&Array.isArray(o.media.surfaces)?o.media.surfaces:[]).filter(s=>s&&(s.kind==='ceil'||s.kind==='wall'))};o.consoles=o.consoles||[];o.lines=(o.lines||[]).filter(l=>LINES[l.kind]&&Array.isArray(l.pts)&&l.pts.length>1);o.lights=(o.lights||[]).filter(l=>LIGHTS[l.type]);(o.cams||[]).forEach(c=>{if(!c.lens){c.lens='xa20';c.f=c.fov?SW/(2*Math.tan(c.fov*Math.PI/360)):20;c.ext=0;c.shot=''}});const ch=CAT.find(c=>c.name===o.seats.chairName&&c.ok);o.seats.chair=ch?ch.id:-1;
   Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,d,o);return miss}
 function say(m){smsg=m;const e=$('#smsg');if(e)e.textContent=m}
-async function refreshScenes(){try{const r=await fetch('api/scenes');if(!r.ok)throw 0;scenes=await r.json()}catch(e){scenes=null}panel()}
+let ME={tenant:'',team:'',admin:false,agreed:true},SD=[],HIST=[],histFor=null;
+async function refreshScenes(){try{const r=await fetch('api/scenes?detail=1');if(!r.ok)throw 0;SD=await r.json();scenes=SD.map(x=>x.name)}catch(e){scenes=null;SD=[]}histFor=null;panel()}
+async function loadScene(name,from){try{const r=await fetch(from||('api/scenes/'+encodeURIComponent(name)));if(!r.ok)throw 0;const miss=restore(await r.json());sceneName=name;view='3d';
+    smsg=`「${name}」을 불러왔습니다.`+(miss.length?` 목록에서 사라진 비품 ${miss.length}개는 빠졌습니다.`:'');histFor=null;panel();build()}catch(err){say('불러오지 못했습니다.')}}
+const vKey=n=>(n||'').split(' · ')[0].trim();
+async function fetchHist(){const v=vKey(S.venue.name);histFor=S.venue.name||'';HIST=[];if(v){try{const r=await fetch('api/history?venue='+encodeURIComponent(v));if(r.ok)HIST=await r.json()}catch(e){}}
+  renderHist()}
+function renderHist(){const v=vKey(S.venue.name),e=$('#vhist');if(e)e.innerHTML=HIST.length?`<b style="color:var(--lime)">이 행사장에서 한 지난 행사 ${HIST.length}건</b>`+HIST.slice(0,8).map(x=>`<div style="display:flex;gap:6px;align-items:center;margin-top:5px"><span style="flex:1">${esc(x.name)}<span style="color:var(--dim)"> · ${esc(x.date||x.saved_at.slice(0,10)||'날짜 없음')}${x.by?' · '+esc(x.by):''}</span></span><button data-loadsc="${esc(x.name)}" style="padding:3px 9px;font-size:12px">불러오기</button></div>`).join(''):(v?'<span style="color:var(--dim)">이 행사장으로 저장한 지난 행사가 아직 없습니다.</span>':'');if(e)e.style.display=v?'block':'none'}
+async function loadMe(){try{const r=await fetch('api/me');if(r.ok)ME=await r.json()}catch(e){}
+  if(ME.tenant&&!ME.agreed)document.body.insertAdjacentHTML('beforeend',`<div id="agreebox" style="position:fixed;inset:0;background:rgba(5,6,15,.9);z-index:40;display:flex;align-items:center;justify-content:center;padding:20px"><div style="max-width:520px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px"><h1>이용 안내</h1>
+  <div class="sub" style="font-size:14px;line-height:1.7;color:var(--text)">W플레이스는 우리미디어가 만들어 제공하는 프로그램입니다 (${esc(ME.team)} 사용 키).<br><br>· 이 프로그램에서 <b>저장하는 행사 배치와 행사장 자료는 우리미디어 서버에 보관</b>됩니다.<br>· 우리미디어는 이 자료를 <b>열람하고, 행사장 자료(크기·도면)를 쌓는 데 활용</b>할 수 있습니다.<br>· 우리미디어가 저장한 행사 자료는 이 키로 볼 수 없습니다.</div>
+  <button class="wide on" id="agreebtn" style="margin-top:14px">확인하고 동의합니다</button></div></div>`);panel()}
 const bcol=c=>!c.ok||c.status==='없음'?'#ff6b6b':c.status==='확인'?'#D4F53C':c.status==='검색'?'#9fd0ff':'#ffb347';
+
+// ───────── 미디어아트 · 미디어월 (천장·벽면 미디어 LED) ─────────
+// 면 하나 = {kind:'ceil'|'wall', w,h(m), px,py(해상도), x,z(행사장 가운데 0, 무대 쪽 −), y(천장은 설치 높이·벽은 하단 높이), rot, bright(%), grid, mx,my(4K 픽셀맵 위치), src(애니메이션 이름|img|video), img, vimg(영상 첫 장면), vid}
+const MKIND={ceil:'천장 LED',wall:'벽면 LED'};
+const MANIM=[['forest','숲 · 식물이 자라남'],['data','데이터 패널 · 빅데이터 입자'],['galaxy','은하수'],['wave','그라데이션 물결']];
+const MPRESET={forest:{kind:'ceil',w:9,h:3.5,px:2304,py:896,mx:0,my:768,src:'forest',grid:1,name:'FOREST OF BIGDATA 천장'},wall:{kind:'wall',w:12,h:3,px:3072,py:768,mx:0,my:0,src:'data',grid:1,name:'벽면'},
+  ceil:{kind:'ceil',w:6,h:3,px:1536,py:768,src:'galaxy',grid:1},wall0:{kind:'wall',w:8,h:3,px:2048,py:768,src:'wave',grid:1}};
+let mMsg='',mUp=null;
+function newMedia(p){const {d,h}=S.venue,ws=S.media.surfaces.find(s=>s.kind==='wall'),s=Object.assign({x:0,rot:0,bright:100,grid:1},JSON.parse(JSON.stringify(p)));
+  if(s.kind==='wall'){s.z=r2(-d/2+.15);s.y=r2(Math.max(0,Math.min(.5,h-s.h-.2)))}
+  else if(ws){s.x=+ws.x||0;s.y=r2(Math.min(h-.15,(+ws.y||0)+(+ws.h||0)));s.z=r2(Math.min(d/2-s.h/2,(+ws.z||0)+s.h/2+.1))}   // 벽 위에서 객석 쪽으로 이어지게
+  else{s.y=r2(Math.max(2.5,h-.3));s.z=0}
+  S.media.surfaces.push(s);return S.media.surfaces.length-1}
+function mediaPanel(){const M=S.media.surfaces,o=(i,k)=>`media.surfaces.${i}.${k}`;
+  return `<h2 data-sec="media">미디어아트 · 미디어월</h2>
+  <div class="sub" style="margin:0 0 8px">천장·벽면에 다는 미디어 LED입니다. 면마다 크기·해상도와 띄울 영상을 고르면 3D에서 바로 재생됩니다. 위쪽 「미디어월」 버튼으로 정면에서 봅니다.</div>
+  <button class="wide" data-mpre="forest">FOREST OF BIGDATA 천장 9×3.5m · 2304×896</button>
+  <button class="wide" data-mpre="wall" style="margin-top:6px">벽면 12×3m · 3072×768</button>
+  <div class="row two" style="margin-top:6px"><button data-mpre="ceil">+ 천장 LED</button><button data-mpre="wall0">+ 벽면 LED</button></div>
+  ${M.length?`<button class="wide" id="mapbtn" style="margin-top:2px">4K 픽셀맵 한 장 올려 면마다 나누기</button><input type="file" id="mapfile" accept="image/*" hidden>
+  <div class="sub" style="margin:4px 0 0">3840×2160 한 장에서 면마다 적힌 「픽셀맵 위치」부터 그 면 해상도만큼 잘라 씁니다 (기본: 벽 0,0 · 천장 0,768).</div>`:''}
+  <div class="sub" id="mmsg" style="margin:6px 0 0;color:var(--lime)">${esc(mMsg)}</div><input type="file" id="mfile" hidden>
+  ${M.map((s,i)=>{const ce=s.kind==='ceil',dx=Math.round((+s.px||0)/(+s.w||1)),dy=Math.round((+s.py||0)/(+s.h||1));
+    return `<div class="cam" data-sec="media:${i}" style="border-left:3px solid #ff5fa2"><div class="top"><b>${MKIND[s.kind]} ${i+1}${s.name?' · '+esc(s.name):''}</b><button class="x" data-delmedia="${i}">빼기</button></div>
+  <div class="row two"><label>종류<select data-p="${o(i,'kind')}" data-str>${Object.entries(MKIND).map(([k,n])=>`<option value="${k}" ${s.kind===k?'selected':''}>${n}${k==='ceil'?' (아래를 봄)':' (세워 둠)'}</option>`).join('')}</select></label>${num(o(i,'rot'),'회전 °',15)}</div>
+  <div class="row">${num(o(i,'w'),'가로 m')}${num(o(i,'h'),ce?'세로(깊이) m':'세로(높이) m')}${num(o(i,'bright'),'밝기 %',10)}</div>
+  <div class="row">${num(o(i,'px'),'해상도 가로 px',64)}${num(o(i,'py'),'해상도 세로 px',64)}<label>캐비닛 격자<select data-p="${o(i,'grid')}"><option value="0" ${+s.grid?'':'selected'}>안 보임</option><option value="1" ${+s.grid?'selected':''}>0.5m 격자</option></select></label></div>
+  <div class="row">${num(o(i,'x'),'좌우 m')}${num(o(i,'z'),'앞뒤 m (무대 쪽 −)')}${num(o(i,'y'),ce?'설치 높이 m':'하단 높이 m',0.1)}</div>
+  <label>띄울 콘텐츠<select data-p="${o(i,'src')}" data-str>${MANIM.map(([k,n])=>`<option value="${k}" ${s.src===k?'selected':''}>${n}</option>`).join('')}${s.img?`<option value="img" ${s.src==='img'?'selected':''}>올린 이미지</option>`:''}${s.vimg?`<option value="video" ${s.src==='video'?'selected':''}>올린 영상</option>`:''}</select></label>
+  <div class="row two" style="margin-top:6px"><button data-mup="img,${i}">이미지 올리기</button><button data-mup="vid,${i}">영상 올리기</button></div>
+  <div class="row two">${num(o(i,'mx'),'픽셀맵 위치 x px',64)}${num(o(i,'my'),'픽셀맵 위치 y px',64)}</div>
+  <div class="note" style="margin:0">1m당 가로 ${dx}px · 세로 ${dy}px${Math.abs(dx-dy)>2?' <span style="color:#ffb347">(가로·세로 밀도가 달라 그림이 늘어나 보일 수 있음)</span>':''}${s.src==='video'?'<br><span style="color:#ffb347">영상은 이 PC에서만 재생됩니다. 공유 링크에는 첫 장면 사진이 들어갑니다.</span>'+(VIDS[s.vid]?'':'<br><span style="color:#ff6b6b">다시 열어서 영상 파일이 빠졌습니다 — 첫 장면만 보입니다. 다시 올려 주세요.</span>'):''}</div></div>`}).join('')}`}
+const fitJpeg=(src,W0,H0,crop,px,py)=>{px=Math.max(16,+px||1024);py=Math.max(16,+py||512);const k=Math.min(1,2048/Math.max(px,py)),c=document.createElement('canvas');c.width=Math.round(px*k);c.height=Math.round(py*k);
+  const a=px/py,b=W0/H0,[sx,sy,sw,sh]=crop||(b>a?[(W0-H0*a)/2,0,H0*a,H0]:[0,(H0-W0/a)/2,W0,W0/a]);   // 면 비율에 맞게 가운데를 잘라 씀
+  c.getContext('2d').drawImage(src,sx,sy,sw,sh,0,0,c.width,c.height);return c.toDataURL('image/jpeg',.8)};
+const mmsg=t=>{mMsg=t;const e=$('#mmsg');if(e)e.textContent=t};
+async function mediaUpload(file){const [k,i]=mUp||[],s=S.media.surfaces[+i];if(!s)return;
+  try{if(k==='img'){const bm=await createImageBitmap(file);s.img=fitJpeg(bm,bm.width,bm.height,null,s.px,s.py);s.src='img';mmsg(`${MKIND[s.kind]} ${+i+1}에 이미지를 넣었습니다 (면 해상도에 맞춰 줄임).`)}
+    else{const id=s.vid||Math.random().toString(36).slice(2,8),v=document.createElement('video');v.muted=true;v.loop=true;v.playsInline=true;v.src=URL.createObjectURL(file);
+      await new Promise((ok,no)=>{v.onloadeddata=ok;v.onerror=no});v.currentTime=Math.min(.5,(v.duration||1)/10);await new Promise(ok=>{v.onseeked=ok;setTimeout(ok,1500)});
+      s.vimg=fitJpeg(v,v.videoWidth,v.videoHeight,null,s.px,s.py);
+      if(VIDS[id]){VIDS[id].tex.dispose();URL.revokeObjectURL(VIDS[id].v.src)}const t=new THREE.VideoTexture(v);t.encoding=THREE.sRGBEncoding;VIDS[id]={v,tex:t};s.vid=id;s.src='video';v.play().catch(()=>{});
+      mmsg('영상을 넣었습니다. 이 PC에서만 재생되고, 공유 링크에는 첫 장면 사진이 들어갑니다.')}
+    panel();build()}catch(e){mmsg('파일을 읽지 못했습니다. 다른 파일로 해 보세요.')}}
+async function pixelMap(file){try{const bm=await createImageBitmap(file),k=bm.width/3840;let n=0;
+    S.media.surfaces.forEach(s=>{const sx=(+s.mx||0)*k,sy=(+s.my||0)*k,sw=(+s.px||0)*k,sh=(+s.py||0)*k;if(sw<8||sh<8||sx+sw>bm.width+1||sy+sh>bm.height+1)return;s.img=fitJpeg(bm,bm.width,bm.height,[sx,sy,sw,sh],s.px,s.py);s.src='img';n++});
+    mmsg(n?`픽셀맵(${bm.width}×${bm.height})을 면 ${n}개에 나눠 넣었습니다.`:'픽셀맵 안에 들어가는 면이 없습니다. 면마다 「픽셀맵 위치」와 해상도를 확인해 주세요.');panel();build()}catch(e){mmsg('픽셀맵 그림을 읽지 못했습니다.')}}
+// 면에 붙일 그림: 올린 영상 → 올린 이미지(영상 첫 장면) → 내장 애니메이션(캔버스에 매 순간 그림)
+const LIVE=new Map(),IMGT=new Map(),VIDS={};let MUSED=new Set();
+function mediaTex(s,i){if(s.src==='video'&&VIDS[s.vid])return VIDS[s.vid].tex;
+  const im=s.src==='img'?s.img:s.src==='video'?s.vimg:null;
+  if(im){let t=IMGT.get(im);if(!t){const e=new Image();t=new THREE.Texture(e);t.encoding=THREE.sRGBEncoding;t.minFilter=THREE.LinearFilter;e.onload=()=>{t.needsUpdate=true};e.src=im;IMGT.set(im,t)}MUSED.add(im);return t}
+  const an=MDRAW[s.src]?s.src:'wave',px=Math.max(64,+s.px||1024),py=Math.max(32,+s.py||512),cw=Math.min(1024,Math.round(px)),ch=Math.max(32,Math.min(1024,Math.round(cw*py/px))),k=i+'|'+an+'|'+cw+'|'+ch;
+  let L=LIVE.get(k);if(!L){const c=document.createElement('canvas');c.width=cw;c.height=ch;const t=new THREE.CanvasTexture(c);t.encoding=THREE.sRGBEncoding;t.minFilter=THREE.LinearFilter;L={c,g:c.getContext('2d'),t,an,st:{}};LIVE.set(k,L);MDRAW[an](L.g,cw,ch,performance.now()/1000,L.st)}
+  MUSED.add(k);return L.t}
+function mediaPrune(){for(const [k,L] of LIVE)if(!MUSED.has(k)){L.t.dispose();LIVE.delete(k)}for(const [k,t] of IMGT)if(!MUSED.has(k)){t.dispose();IMGT.delete(k)}}
+function mediaTick(){if(!LIVE.size)return;const t=performance.now()/1000;for(const L of LIVE.values()){MDRAW[L.an](L.g,L.c.width,L.c.height,t,L.st);L.t.needsUpdate=true}}
+const MDRAW={
+  forest(g,W,H,t,st){if(!st.p){const n=Math.max(8,Math.round(W/34));st.p=[...Array(n)].map((_,k)=>({x:(k+.5+(R()-.5)*.8)*W/n,hm:H*(.35+R()*.6),off:R(),sp:.05+R()*.05,lean:(R()-.5)*.5,hue:90+R()*60,wd:1.5+R()*2.5}));st.f=[...Array(70)].map(()=>({x:R()*W,y:R()*H,a:R()*7,s:.3+R()}))}
+    const gr=g.createLinearGradient(0,0,0,H);gr.addColorStop(0,'#020a10');gr.addColorStop(.6,'#03261a');gr.addColorStop(1,'#0a4a2a');g.fillStyle=gr;g.fillRect(0,0,W,H);
+    g.globalCompositeOperation='lighter';g.strokeStyle='rgba(120,255,200,.07)';g.lineWidth=1;for(let y=(t*20)%40;y<H;y+=40){g.beginPath();g.moveTo(0,y);g.lineTo(W,y);g.stroke()}
+    for(const p of st.p){const ph=(t*p.sp+p.off)%1,gro=Math.min(1,ph/.7),fade=ph>.9?1-(ph-.9)/.1:1,L=p.hm*(1-Math.pow(1-gro,3)),sw=Math.sin(t*.8+p.off*9)*6,ex=p.x+p.lean*L+sw,ey=H-L,cx=p.x+p.lean*L*.3,cy=H-L*.5;
+      g.strokeStyle=`hsla(${p.hue},70%,45%,${.8*fade})`;g.lineWidth=p.wd;g.beginPath();g.moveTo(p.x,H);g.quadraticCurveTo(cx,cy,ex,ey);g.stroke();
+      const nl=Math.floor(L/22);for(let j=1;j<=nl;j++){const u=j/(nl+1),bx=(1-u)*(1-u)*p.x+2*(1-u)*u*cx+u*u*ex,by=(1-u)*(1-u)*H+2*(1-u)*u*cy+u*u*ey,sd=j%2?1:-1,ls=(6+p.wd*2)*Math.min(1,nl-j+1);
+        g.fillStyle=`hsla(${p.hue+j*3},80%,${45+u*20}%,${.55*fade})`;g.beginPath();g.ellipse(bx+sd*ls*.8,by-ls*.2,ls,ls*.38,sd*.6,0,7);g.fill()}
+      if(gro>=1){const fl=Math.min(1,(ph-.7)/.08)*fade;g.fillStyle=`rgba(255,95,162,${.7*fl})`;g.beginPath();g.arc(ex,ey,4+p.wd*1.5,0,7);g.fill();g.fillStyle=`rgba(212,245,60,${.6*fl})`;g.beginPath();g.arc(ex,ey,2,0,7);g.fill()}}
+    for(const f of st.f){const x=((f.x+Math.sin(t*f.s+f.a)*30)%W+W)%W,y=((f.y-t*8*f.s)%H+H)%H,al=Math.max(0,.4+.6*Math.sin(t*3*f.s+f.a));g.fillStyle=`rgba(212,245,60,${al*.8})`;g.fillRect(x,y,2.5,2.5)}
+    g.globalCompositeOperation='source-over'},
+  data(g,W,H,t,st){if(!st.c){st.cols=Math.max(3,Math.round(W/180));st.rows=Math.max(2,Math.round(H/150));st.c=[...Array(st.cols*st.rows)].map(()=>({k:Math.floor(R()*3),ph:R()*7,v:Math.floor(R()*90000)}));st.q=[...Array(260)].map(()=>({x:R()*W,y:R()*H,v:30+R()*120,c:R()}))}
+    g.fillStyle='#050816';g.fillRect(0,0,W,H);const cw=W/st.cols,ch=H/st.rows,pd=Math.min(cw,ch)*.08;
+    st.c.forEach((c,n)=>{const x=(n%st.cols)*cw+pd,y=Math.floor(n/st.cols)*ch+pd,w=cw-pd*2,h=ch-pd*2,col=['#D4F53C','#4fc3ff','#ff5fa2'][(n+c.k)%3];
+      g.fillStyle='rgba(20,23,46,.9)';g.fillRect(x,y,w,h);g.globalAlpha=.5;g.strokeStyle=col;g.lineWidth=1.5;g.strokeRect(x,y,w,h);g.globalAlpha=1;
+      g.fillStyle=col;g.font=`600 ${Math.max(10,Math.round(h*.15))}px Unbounded,Pretendard,sans-serif`;g.textBaseline='top';g.fillText(String(Math.floor(c.v+t*137*(1+c.k))%1000000).padStart(6,'0'),x+w*.06,y+h*.07);
+      if(c.k===0){for(let b=0;b<10;b++){const bh=h*.55*(.25+.75*Math.abs(Math.sin(t*1.3+b*.7+c.ph)));g.fillRect(x+w*.06+b*w*.088,y+h*.92-bh,w*.06,bh)}}
+      else if(c.k===1){g.beginPath();for(let k=0;k<=40;k++){const px=x+w*.06+k*w*.88/40,py=y+h*.62+Math.sin(t*2+k*.45+c.ph)*h*.2*Math.sin(k*.2+t*.3);k?g.lineTo(px,py):g.moveTo(px,py)}g.lineWidth=2;g.strokeStyle=col;g.stroke()}
+      else{const r=Math.min(w,h)*.24,cx=x+w*.5,cy=y+h*.6,a=(Math.sin(t*.7+c.ph)*.5+.5)*Math.PI*2;g.lineWidth=r*.28;g.strokeStyle='rgba(255,255,255,.1)';g.beginPath();g.arc(cx,cy,r,0,7);g.stroke();g.strokeStyle=col;g.beginPath();g.arc(cx,cy,r,-Math.PI/2,-Math.PI/2+a);g.stroke()}});
+    g.globalCompositeOperation='lighter';
+    st.q.forEach(p=>{const x=(p.x+t*p.v)%W,col=p.c<.5?'79,195,255':p.c<.8?'212,245,60':'255,95,162';g.fillStyle=`rgba(${col},.22)`;g.fillRect(x-36,p.y,36,1.5);g.fillStyle=`rgba(${col},.95)`;g.fillRect(x-2,p.y-1,3,3)});
+    g.globalCompositeOperation='source-over'},
+  galaxy(g,W,H,t,st){if(!st.s){st.s=[...Array(420)].map(()=>[R()*W,R()*H,R()*1.6+.4,R()*7]);st.p=[...Array(1600)].map(()=>{const arm=Math.floor(R()*3),r=Math.pow(R(),.7);return {r,a:arm*2.094+r*4.5+(R()-.5)*.7*(1.2-r),c:R()}})}
+    g.fillStyle='#02030a';g.fillRect(0,0,W,H);const cx=W/2,cy=H/2,rx=W*.48,ry=H*.62;g.globalCompositeOperation='lighter';
+    [['120,60,255',0],['255,60,160',2.1],['60,200,255',4.2]].forEach(([c,o])=>{const x=cx+Math.cos(t*.05+o)*W*.25,y=cy+Math.sin(t*.07+o)*H*.25,rr=Math.max(W,H)*.35,gr=g.createRadialGradient(x,y,0,x,y,rr);gr.addColorStop(0,`rgba(${c},.2)`);gr.addColorStop(1,`rgba(${c},0)`);g.fillStyle=gr;g.fillRect(0,0,W,H)});
+    st.s.forEach(s=>{g.fillStyle=`rgba(255,255,255,${.35+.35*Math.sin(t*2+s[3])})`;g.fillRect(s[0],s[1],s[2],s[2])});
+    st.p.forEach(p=>{const a=p.a+t*.12/(p.r+.15),x=cx+Math.cos(a)*p.r*rx,y=cy+Math.sin(a)*p.r*ry,z=p.r<.2?2.4:1.6;g.fillStyle=p.r<.15?'rgba(255,240,200,.9)':p.c<.6?'rgba(170,190,255,.7)':p.c<.85?'rgba(255,120,200,.6)':'rgba(212,245,60,.6)';g.fillRect(x,y,z,z)});
+    const cg=g.createRadialGradient(cx,cy,0,cx,cy,H*.35);cg.addColorStop(0,'rgba(255,245,220,.55)');cg.addColorStop(1,'rgba(255,245,220,0)');g.fillStyle=cg;g.fillRect(0,0,W,H);g.globalCompositeOperation='source-over'},
+  wave(g,W,H,t){const gr=g.createLinearGradient(0,0,W,H),s=(Math.sin(t*.3)+1)/2;gr.addColorStop(0,'#0B0D1E');gr.addColorStop(.5,`hsl(${300+s*30},60%,16%)`);gr.addColorStop(1,'#0B0D1E');g.fillStyle=gr;g.fillRect(0,0,W,H);
+    g.globalCompositeOperation='lighter';['255,46,160','220,60,255','120,90,255','80,200,255','212,245,60'].forEach((c,k)=>{g.beginPath();g.moveTo(0,H);for(let x=0;x<=W+1;x+=W/80){g.lineTo(x,H*(.25+.12*k)+Math.sin(x/W*Math.PI*(2+k*.6)+t*(.6+k*.15))*H*.13+Math.sin(x/W*9+t*1.3+k)*H*.03)}g.lineTo(W,H);g.closePath();
+      const gg=g.createLinearGradient(0,0,0,H);gg.addColorStop(0,`rgba(${c},0)`);gg.addColorStop(.5,`rgba(${c},.35)`);gg.addColorStop(1,`rgba(${c},.05)`);g.fillStyle=gg;g.fill()});g.globalCompositeOperation='source-over'}};
+// 미디어월 시점: 가장 큰 벽면 정면에서, 위쪽 천장 면까지 함께 보이게
+function mediaView(asp){const M=S.media.surfaces,{w,d}=S.venue,wl=M.filter(s=>s.kind==='wall').sort((a,b)=>b.w*b.h-a.w*a.h)[0],cl=M.filter(s=>s.kind==='ceil').sort((a,b)=>b.w*b.h-a.w*a.h)[0];if(!wl&&!cl)return false;
+  const cx=v=>Math.max(-w/2+.3,Math.min(w/2-.3,v)),cz=v=>Math.max(-d/2+.3,Math.min(d/2-.3,v));camera.fov=asp<1.2?70:58;
+  if(wl){const th=-(+wl.rot||0)*Math.PI/180,nx=Math.sin(th),nz=Math.cos(th),W=+wl.w||1,Hh=+wl.h||1,wy=(+wl.y||0)+Hh/2,D=Math.max(5,W*.85/Math.max(.8,Math.min(asp,2))+1.5);
+    let tx=+wl.x||0,ty=wy,tz=+wl.z||0;if(cl){ty=(wy+(+cl.y||0))/2+.3;tx=(tx+(+cl.x||0))/2;tz=(tz*2+(+cl.z||0))/3}
+    camera.position.set(cx((+wl.x||0)+nx*D),1.6,cz((+wl.z||0)+nz*D));controls.target.set(tx,ty,tz)}
+  else{camera.position.set(cx(+cl.x||0),1.6,cz((+cl.z||0)+(+cl.h||1)/2+4));controls.target.set(+cl.x||0,+cl.y||3,+cl.z||0)}
+  return true}
 
 // ───────── 왼쪽 입력 칸 ─────────
 const $=s=>document.querySelector(s);
@@ -208,16 +337,21 @@ function panel(){
   <label>행사 이름<input id="sname" placeholder="예: 11월 OO 행사" value="${sceneName.replace(/"/g,'&quot;')}"></label>
   <div class="row two" style="margin-top:6px"><label>행사 날짜<input type="date" data-p="when.date" data-str value="${esc((S.when||{}).date||'')}"></label><label>시간 · 메모<input data-p="when.note" data-str placeholder="예: 14:00 리허설 11:00" value="${esc((S.when||{}).note||'')}"></label></div>
   <div class="row two" style="margin-top:6px"><button id="savescene">저장</button><button id="newscene">새로 시작</button></div>
-  ${scenes===null?'<div class="note">저장 서버가 꺼져 있어 저장·불러오기를 쓸 수 없습니다.</div>':`<label>저장된 행사 (${scenes.length}건)<select id="loadscene"><option value="">불러올 행사 고르기</option>${scenes.map(n=>`<option ${n===sceneName?'selected':''}>${n.replace(/</g,'&lt;')}</option>`).join('')}</select></label>
+  ${scenes===null?'<div class="note">저장 서버가 꺼져 있어 저장·불러오기를 쓸 수 없습니다.</div>':`<label>저장된 행사 (${scenes.length}건)<select id="loadscene"><option value="">불러올 행사 고르기</option>${SD.map(x=>`<option value="${esc(x.name)}" ${x.name===sceneName?'selected':''}>${esc(x.name)}${x.date?' · '+esc(x.date):''}${x.venue?' · '+esc(vKey(x.venue)):''}</option>`).join('')}</select></label>
   <button class="wide" id="delscene" style="margin-top:6px;color:var(--dim)">고른 행사 지우기</button>`}
+  ${ME.admin?'<button class="wide" id="adminbtn" style="margin-top:6px">사용 키 · 다른 팀이 저장한 자료</button>':''}${ME.tenant?`<div class="sub" style="margin:6px 0 0">${esc(ME.team)} 사용 키로 쓰는 중 · 저장 자료는 우리미디어 서버에 보관됩니다.</div>`:''}
   <div class="sub" id="smsg" style="margin:6px 0 0;color:var(--lime)">${smsg}</div>
   <h2>행사장</h2>
   <button class="wide" id="findvenue">행사장 찾기 (호텔 · 컨벤션 홀)</button>
   ${S.venue.name?`<div class="note" style="margin-top:8px"><b>${esc(S.venue.name)}</b><br>${S.venue.status==='확인'?'공식 자료로 확인한 크기':S.venue.status==='추정'?'<span style="color:#ffb347">사진으로 어림한 크기 · 실측 필요</span>':'<span style="color:#9fd0ff">검색값 · 재확인 필요</span>'}${S.venue.noH?'<br><span style="color:#ffb347">천장 높이가 안 나와 4m로 가정</span>':''}${S.venue.plan?`<br><a href="${esc(S.venue.plan)}" target="_blank" rel="noopener">도면 보기</a>`:''}${S.venue.src?` · <a href="${esc(S.venue.src)}" target="_blank" rel="noopener">출처</a>`:''}</div>`:'<div style="height:8px"></div>'}
+  <div class="note" id="vhist" style="display:none"></div>
   <div class="row">${num('venue.w','가로 m')}${num('venue.d','세로 m')}${num('venue.h','높이 m')}</div>
+  <div class="row two"><label>행사장 이름 (홀은 「 · 」 뒤에)<input data-p="venue.name" data-str placeholder="예: OO문화회관 · 대강당" value="${esc(S.venue.name||'')}"></label><label>이 크기는<select data-p="venue.measured"><option value="0" ${+S.venue.measured?'':'selected'}>어림값</option><option value="1" ${+S.venue.measured?'selected':''}>현장에서 잰 값</option></select></label></div>
+  <button class="wide" id="savevenue" style="margin-bottom:6px">이 행사장을 자료로 쌓기 (다음에 「행사장 찾기」에 나옴)</button>
   <button class="wide" id="swapwd">무대 놓는 벽 바꾸기 (가로 ↔ 세로)</button>
-  <button class="wide" id="lookbtn" style="margin-top:6px">사진으로 공간 느낌 맞추기</button><input type="file" id="lookfile" accept="image/jpeg,image/png,image/webp" hidden>
+  <button class="wide" id="lookbtn" style="margin-top:6px">현장 사진으로 공간 맞추기 (여러 장 가능)</button><input type="file" id="lookfile" multiple accept="image/jpeg,image/png,image/webp" hidden>
   ${S.venue.look?(L=>`<div class="note" style="margin-top:8px"><b>사진 느낌 적용됨</b> · ${esc(L.space)}<br>${esc(L.summary)}${L.estimate&&L.estimate.w?`<br>사진으로 어림한 크기 약 ${L.estimate.w} × ${L.estimate.d}m · 높이 ${L.estimate.h}m <span style="color:#ffb347">(정확하지 않음)</span>`:''}
+${(L.features||[]).length?`<br><span style="color:var(--dim)">사진에서 읽은 시설:</span> ${L.features.map(f=>`${esc(f.where)} ${esc(f.type)}${f.count>1?' '+f.count+'개':''}`).join(' · ')} <span style="color:#ffb347">(위치는 대략)</span>`:''}
   <div class="row two" style="margin:6px 0 0">${L.estimate&&L.estimate.w?'<button id="lookdims">이 크기로 바꾸기</button>':'<span></span>'}<button id="lookclear">느낌 지우기</button></div></div>`)(S.venue.look):''}
   <div class="sub" id="lookmsg" style="margin:6px 0 0;color:var(--lime)"></div>
   <h2 data-sec="stage">무대 (덧마루 조립)</h2>
@@ -227,14 +361,21 @@ function panel(){
   <div class="note" id="count"></div>
   <h2 data-sec="led">LED 화면</h2>
   <div class="row two"><label>종류<select data-p="screen.kind" data-str>${[['fold','폴딩 LED (1대 1,280mm)'],['c55','캐비닛 500 × 500'],['c510','캐비닛 500 × 1000']].map(o=>`<option value="${o[0]}" ${(S.screen.kind||'fold')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>
-  <label>뒤 구조물<select data-p="screen.sup" data-str>${[['none','없음'],['layher','레이어(레이허)'],['asiba','아시바(강관 비계)']].map(o=>`<option value="${o[0]}" ${(S.screen.sup||'none')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label></div>
+  ${num('screen.off','뒤 벽에서 m')}</div>
+  <button class="wide" id="addframe" style="margin-bottom:6px">LED 뒤에 구조물 세우기 (레이어·아시바)</button>
   <div class="row">${num('screen.n','폴딩 대 수',1)}${num('screen.cw','가로 m',0.5)}${num('screen.h','높이 m',0.5)}</div>
   <div class="sub" style="margin:0 0 6px">폴딩은 대 수로(가로 m를 넣으면 그 크기 벽으로), 캐비닛은 가로·높이 m를 넣으면 장 수에 맞게 맞춰집니다.</div>
   <label>화면에 띄울 글자<input data-p="screen.text" data-str value="${esc(S.screen.text||'')}"></label>
   <div class="note" id="ledn"></div>
-  <h2 data-sec="presenter">발표자</h2>
-  <div class="row two"><label>모습<select data-p="presenter.mode" data-str>${[['stand','서서 (보면대)'],['table','테이블에 앉음'],['none','없음']].map(o=>`<option value="${o[0]}" ${S.presenter.mode===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>${num('presenter.dist','LED 앞 거리 m')}</div>
-  <div class="sub" style="margin:0">무대(데크)가 있으면 무대 위에, 없으면 LED 앞 거리만큼 떨어진 바닥에 섭니다.</div>
+  ${mediaPanel()}
+  <h2 data-sec="presenter">발표자 · 사회자</h2>
+  <div class="row two">${num('presenter.dist','LED 앞 거리 m')}<label>포디움 글자<input disabled value="LED 「화면에 띄울 글자」와 같음"></label></div>
+  <div class="sub" style="margin:0 0 8px">무대(데크)가 있으면 무대 위에, 없으면 LED 앞 거리만큼 떨어진 바닥에 섭니다. 포디움 앞 보드에는 행사 타이틀이 그대로 들어갑니다.</div>
+  ${S.people.map((q,i)=>`<div class="cam" data-sec="ppl:${i}" style="border-left:3px solid ${ROLEC[q.role]||'#fff'}"><div class="top"><b>${pName(q,i)}</b><button class="x" data-delppl="${i}">빼기</button></div>
+  <div class="row two"><label>역할<select data-p="people.${i}.role" data-str>${['사회자','발표자'].map(r=>`<option ${q.role===r?'selected':''}>${r}</option>`).join('')}</select></label>${num(`people.${i}.x`,'좌우 m (왼쪽 −)')}</div>
+  <div class="row two"><label>모습<select data-p="people.${i}.mode" data-str>${PMODES.map(o=>`<option value="${o[0]}" ${q.mode===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>
+  ${q.mode==='table'?`<label>테이블 길이<select data-p="people.${i}.tw">${[900,1200,1500,1800,2100].map(v=>`<option value="${v}" ${(+q.tw||1800)===v?'selected':''}>${v} × 750</option>`).join('')}</select></label>`:'<span></span>'}</div></div>`).join('')}
+  <div class="row two"><button id="addmc">+ 사회자 (왼쪽)</button><button id="addsp">+ 발표자 (오른쪽)</button></div>
   <h2 data-sec="seats">객석</h2>
   <label>놓는 방식<select data-p="seats.layout" data-str>${[['theater','일자로 (극장식)'],['curve','둥글게 (부채꼴)'],['chevron','비스듬히 (V자)'],['round','원탁 (연회식)'],['class','책상과 함께 (강의식)'],['tier','계단식 (수납 객석)']].map(o=>`<option value="${o[0]}" ${S.seats.layout===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>
   ${(t=>t?`<div class="row two" style="margin-top:6px">${num('seats.rows','테이블 줄 수',1)}${num('seats.cols','한 줄 테이블 수',1)}</div>
@@ -242,7 +383,7 @@ function panel(){
   :S.seats.layout==='tier'?`<div class="row two" style="margin-top:6px">${num('seats.rows','단 수',1)}${num('seats.cols','한 단 좌석 수',1)}</div><div class="row two">${num('seats.rise','한 단 높이 cm',5)}${num('seats.back','뒤 벽에서 m')}</div>`
   :`<div class="row ${S.seats.layout==='chevron'?'':'two'}" style="margin-top:6px">${num('seats.rows','줄 수',1)}${num('seats.cols','한 줄 의자 수',1)}${S.seats.layout==='chevron'?num('seats.angle','꺾는 각도 °',5):''}</div>`)(S.seats.layout==='round'||S.seats.layout==='class')}
   <label>의자 종류<select data-p="seats.chair"><option value="-1">기본 의자 (440×440)</option>${CHAIRS.map(c=>`<option value="${c.id}" ${S.seats.chair==c.id?'selected':''}>${c.name} · ${c.w}×${c.d}</option>`).join('')}</select></label>
-  <h2>비품 놓기</h2>
+  <h2 data-sec="items">비품 놓기</h2>
   <div class="row two"><label>분류<select id="pcat">${CATS.map(c=>`<option ${c===pickCat?'selected':''}>${c}</option>`).join('')}</select></label>
   <label>품목<select id="pitem">${CAT.filter(c=>c.cat===pickCat).map(c=>`<option value="${c.id}" ${c.ok?'':'disabled'}>${c.name} — ${c.ok?(c.sure?'':c.status==='없음'?'추정 ':'통상값 '):''}${dims(c)}</option>`).join('')}</select></label></div>
   <button class="wide" id="additem">+ 이 비품 놓기</button>
@@ -253,18 +394,41 @@ function panel(){
   <div class="row">${num(`items.${i}.nx`,'가로 개수',1)}${num(`items.${i}.nz`,'세로 개수',1)}${num(`items.${i}.gap`,'간격 m',0.1)}</div></div>`}).join('')}
   <h2>필요 수량 확인</h2>
   <div class="note" id="tally"></div>
+  <h2 data-sec="safety">구조 · 안전 점검 (참고용)</h2>
+  <div class="note" id="safety" style="line-height:1.6"></div>
+  <div class="sub" style="margin:0">무게·전력·하중 한도는 통상값으로 잡은 사전 점검입니다. 실제 설치는 제조사 하중표, 행사장 리깅 허용 하중과 전기 용량, 자격 있는 담당자의 확인을 따르세요.</div>
   <button class="wide" id="showcat">비품 목록 · 치수 확인표 보기</button>
   <h2 data-sec="lights">조명 · 구조물</h2>
   <div class="sub" style="margin:0 0 8px">위쪽 「조명·구조물」을 눌러 종류를 끌어다 화면에 놓으세요. 놓은 뒤에는 화면에서 끌어서 옮깁니다. 조명을 바턴·트러스·레이어 가까이에 놓으면 거기에 걸립니다.</div>
   ${S.rigs.map((r,i)=>`<div class="cam" data-sec="rig:${i}"><div class="top"><b>${RIGS[r.kind].n} ${i+1}</b><button class="x" data-delrig="${i}">빼기</button></div>
-  <div class="row">${num(`rigs.${i}.x`,'좌우 m')}${num(`rigs.${i}.z`,'무대에서 m')}${num(`rigs.${i}.h`,'높이 m')}</div>
-  ${r.kind==='layher'?'':`<div class="row two">${num(`rigs.${i}.len`,'길이 m')}${num(`rigs.${i}.rot`,'회전 °',15)}</div>`}</div>`).join('')}
+  ${r.kind==='frame'?(()=>{const f=FR[r.sys]||FR.layher,o=(k,arr,u)=>`<select data-p="rigs.${i}.${k}">${arr.map(v=>`<option value="${v}" ${+r[k]===v?'selected':''}>${v}${u}</option>`).join('')}</select>`,q=frDim(r),nb=+r.bays||1,nl=+r.lifts||1;
+    return `<label>종류<select data-p="rigs.${i}.sys" data-str>${Object.entries(FR).map(([k,v])=>`<option value="${k}" ${r.sys===k?'selected':''}>${v.n}</option>`).join('')}</select></label>
+  <div class="row" style="margin-top:6px">${num(`rigs.${i}.x`,'좌우 m')}${num(`rigs.${i}.z`,'무대에서 m')}${num(`rigs.${i}.rot`,'회전 °',15)}</div>
+  <div class="row">${num(`rigs.${i}.bays`,'가로 칸 수',1)}<label>칸 길이${o('bay',f.bay,'m')}</label><label>폭(깊이)${o('dep',f.dep,'m')}</label></div>
+  <div class="row two">${num(`rigs.${i}.lifts`,'단 수',1)}<label>단 높이${o('lift',f.lift,'m')}</label></div>
+  <div class="note" style="margin:0">전체 <b>가로 ${q.W}m × 폭 ${q.D}m × 높이 ${q.Hh}m</b><br>수직재(${r.lift}m) ${(nb+1)*2*nl}개 · 가로 수평재(${r.bay}m) ${nb*2*(nl+1)}개 · 폭 수평재(${r.dep}m) ${(nb+1)*(nl+1)}개<br><span style="color:var(--dim)">대각 가새·발판·베이스는 따로 계산</span></div>`})()
+  :`<div class="row">${num(`rigs.${i}.x`,'좌우 m')}${num(`rigs.${i}.z`,'무대에서 m')}${num(`rigs.${i}.h`,'높이 m')}</div>
+  ${r.kind==='layher'?'':`<div class="row two">${num(`rigs.${i}.len`,'길이 m')}${num(`rigs.${i}.rot`,'회전 °',15)}</div>`}`}</div>`).join('')}
   ${S.lights.map((l,i)=>`<div class="cam" data-sec="light:${i}" style="border-left:3px solid ${l.color||'#fff'}"><div class="top"><b>${LIGHTS[l.type].n} ${i+1}</b><button class="x" data-dellight="${i}">빼기</button></div>
   <div class="sws">${LCOL.map(k=>`<i data-lcol="${i},${k}" title="빛 색" style="background:${k}" class="${(l.color||'#ffffff')===k?'on':''}"></i>`).join('')}</div>
   <div class="sub" style="margin:0 0 6px">${S.rigs[l.rig]?`걸린 곳: <b style="color:var(--lime)">${RIGS[S.rigs[l.rig].kind].n} ${l.rig+1}</b>`:'바닥 · 스탠드'}</div>
   <div class="row">${num(`lights.${i}.x`,'좌우 m')}${num(`lights.${i}.z`,'무대에서 m')}${num(`lights.${i}.h`,'높이 m',0.1)}</div>
   <label>비추는 곳<select data-p="lights.${i}.aim" data-str>${AIMS.map(o=>`<option value="${o[0]}" ${l.aim===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label></div>`).join('')}
-  <h2>카메라</h2>
+  <h2 data-sec="power">전기 · 동선</h2>
+  <div class="sub" style="margin:0 0 8px">「조명·구조물」 목록의 전기·동선에서 끌어다 놓으세요. 케이블 라인이 입장 동선을 가로지르면 화면에 경고가 뜹니다.</div>
+  ${S.boards.map((b,i)=>`<div class="cam" data-sec="board:${i}" style="border-left:3px solid #ffd23d"><div class="top"><b>배전반 ${i+1}</b><button class="x" data-delboard="${i}">빼기</button></div>
+  <div class="row two">${num(`boards.${i}.x`,'좌우 m')}${num(`boards.${i}.z`,'무대에서 m')}</div></div>`).join('')}
+  ${S.lines.map((l,i)=>`<div class="cam" data-sec="line:${i}" style="border-left:3px solid ${LINES[l.kind].c}"><div class="top"><b>${LINES[l.kind].n} ${i+1}</b><button class="x" data-delline="${i}">빼기</button></div>
+  <div class="sub" style="margin:0 0 6px">길이 약 <b style="color:var(--text)">${r1(lineLen(l))}m</b> · 점 ${l.pts.length}개</div>
+  ${l.kind==='path'?'':`<label>바닥 마감<select data-p="lines.${i}.cover" data-str>${COVERS.map(o=>`<option value="${o[0]}" ${(l.cover||'none')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>`}
+  <button class="wide" data-bend="${i}" style="margin-top:6px">꺾는 점 추가</button></div>`).join('')}
+  <h2 data-sec="consoles">콘솔 · 운영</h2>
+  ${S.consoles.length?'':'<div class="sub" style="margin:0 0 8px">항목 목록의 「콘솔 · 운영」에서 끌어다 놓으면 팀 이름표가 붙은 콘솔 테이블이 생깁니다.</div>'}
+  ${S.consoles.map((c,i)=>`<div class="cam" data-sec="con:${i}" style="border-left:3px solid ${TEAMC[c.team]||'#fff'}"><div class="top"><b>콘솔 ${i+1}</b><button class="x" data-delcon="${i}">빼기</button></div>
+  <div class="row two"><label>팀 이름<input data-p="consoles.${i}.team" data-str value="${esc(c.team||'')}"></label><label>테이블 크기<select data-p="consoles.${i}.w">${[900,1200,1500,1800,2100].map(v=>`<option value="${v}" ${(+c.w||1800)===v?'selected':''}>${v} × 750</option>`).join('')}</select></label></div>
+  <div class="row two">${num(`consoles.${i}.n`,'테이블 수',1)}<label>차지하는 자리<input disabled value="가로 ${r2(Math.max(1,Math.round(+c.n||1))*((+c.w||1800)/1000+.05))}m × 깊이 1.6m"></label></div>
+  <div class="row">${num(`consoles.${i}.x`,'좌우 m')}${num(`consoles.${i}.z`,'무대에서 m')}${num(`consoles.${i}.rot`,'회전 °',15)}</div></div>`).join('')}
+  <h2 data-sec="cams">카메라</h2>
   ${S.cams.map((c,i)=>`<div class="cam" data-sec="cam:${i}" style="border-left:3px solid ${camCol(c,i)}"><div class="top"><b>${c.name}</b><button class="x" data-del="${i}">빼기</button></div>
   <div class="sws">${CAMCOL.map(k=>`<i data-col="${i},${k}" title="촬영 범위 색" style="background:${k}" class="${camCol(c,i)===k?'on':''}"></i>`).join('')}</div>
   <div class="row">${num(`cams.${i}.x`,'좌우 m')}${num(`cams.${i}.dist`,'무대에서 m')}${num(`cams.${i}.h`,'높이 m',0.1)}</div>
@@ -272,17 +436,23 @@ function panel(){
   <div class="row two" style="margin-top:6px"><label>렌즈<select data-p="cams.${i}.lens" data-str>${Object.entries(LENSES).map(([k,l])=>`<option value="${k}" ${c.lens===k?'selected':''}>${l.n}${l.ok?'':' *'}</option>`).join('')}</select></label>
   <label>2배 익스텐더<select data-p="cams.${i}.ext"><option value="0" ${c.ext?'':'selected'}>안 씀</option><option value="1" ${c.ext?'selected':''}>씀</option></select></label></div>
   <div class="row two">${num(`cams.${i}.pan`,'좌우 돌리기 ° (오른쪽 +)',1)}${num(`cams.${i}.tilt`,'위아래 ° (위 +)',1)}</div>
+  <label>잡는 사람<select data-p="cams.${i}.who"><option value="-1">주 발표자</option>${S.people.map((q,k)=>`<option value="${k}" ${+c.who===k?'selected':''}>${pName(q,k)}</option>`).join('')}</select></label>
+  <label style="margin-top:6px">카메라 단 형태<select data-p="cams.${i}.rtype" data-str>${[['split','앞뒤 분리 · 1800×900 2장'],['s18','한 판 · 1800×1800'],['s15','한 판 · 1500×1500']].map(o=>`<option value="${o[0]}" ${(c.rtype||'split')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>
+  <div class="row" style="margin-top:6px"><label>단 높이<select data-p="cams.${i}.riser">${RISERS.map(v=>`<option value="${v}" ${(+c.riser||0)===v?'selected':''}>${v?v+'mm':'없음'}</option>`).join('')}</select></label>
+  <label>계단<select data-p="cams.${i}.stairs"><option value="0" ${c.stairs?'':'selected'}>없음</option><option value="1" ${c.stairs?'selected':''}>옆에 붙임</option></select></label>
+  <label>오퍼레이터<select data-p="cams.${i}.op">${['없음','의자에 앉음','서서'].map((n,k)=>`<option value="${k}" ${(+c.op||0)===k?'selected':''}>${n}</option>`).join('')}</select></label></div>
   <label>줌 (넓게 ↔ 당겨서)<input type="range" min="0" max="1000" data-zoom="${i}" value="${zoomPos(c)}"></label>
   <div style="display:flex;gap:4px;flex-wrap:wrap;margin:6px 0">${SHOTS.map(x=>`<button data-shot="${i},${x[0]}" class="${c.shot===x[0]?'on':''}" style="padding:5px 8px;font-size:12px">${x[1]}</button>`).join('')}</div>
   <div class="note" id="ci${i}" style="margin:0"></div></div>`).join('')}
   <div class="sub" style="margin-top:6px">* 표시는 가정하거나 계산한 값입니다. 실제 화면과 한 번 맞춰 보면 정확해집니다.</div>
   <button class="wide" id="addcam">+ 카메라 추가</button>`;
   bar();
+  if(!VIEW&&histFor!==(S.venue.name||''))fetchHist();else if(!VIEW)renderHist();
   if(G.frontZ!==undefined&&!_pb){_pb=true;queueMicrotask(()=>{_pb=false;build()})}   // 칸을 다시 그리면 안내 글도 다시 채운다
 }
 function bar(){
-  const v=[['3d','입체'],['stage','무대 가까이'],['top','위에서'],['seat','객석에서'],...S.cams.map((c,i)=>['cam'+i,c.name+' 화면'])];
-  $('#bar').innerHTML=v.map(([k,n])=>`<button data-v="${k}" class="${view===k?'on':''}">${n}</button>`).join('')+`<span class="sp"></span>${VIEW?'':'<button id="palbtn">조명·구조물</button>'}<button id="sheet">카메라 배치표</button>${VIEW?'':'<button id="share">공유하기</button>'}<button id="save">이미지 저장</button>`;
+  const v=[['3d','입체'],['stage','무대 가까이'],['top','위에서'],['seat','객석에서'],...(S.media.surfaces.length?[['media','미디어월']]:[]),...S.cams.map((c,i)=>['cam'+i,c.name+' 화면'])];
+  $('#bar').innerHTML=v.map(([k,n])=>`<button data-v="${k}" class="${view===k?'on':''}">${n}</button>`).join('')+`<span class="sp"></span>${VIEW?'':'<button id="palbtn">항목 목록</button>'}<button id="sheet">카메라 배치표</button>${VIEW?'':'<button id="share">공유하기</button>'}<button id="save">이미지 저장</button>`;
 }
 document.addEventListener('input',e=>{
   if(e.target.id==='sname'){sceneName=e.target.value;return}
@@ -292,18 +462,20 @@ document.addEventListener('input',e=>{
   const p=e.target.dataset.p; if(!p)return;
   const v=e.target.dataset.str!==undefined?e.target.value:parseFloat(e.target.value);
   if(typeof v==='number'&&isNaN(v))return;
-  set(p,v); if(/^lights\.\d+\.(x|z)$/.test(p)){snapLight(S.lights[+p.split('.')[1]]);panel()} if(/^cams\.\d+\.(lens|ext|body)$/.test(p)){const c=S.cams[+p.split('.')[1]],isM=!!(LENSES[c.lens]||{}).mft;
+  set(p,v); {const m=/^media\.surfaces\.(\d+)\.(kind|src|grid|px|py|w|h)$/.exec(p);if(m){const s=S.media.surfaces[+m[1]];if(m[2]==='kind')s.y=v==='ceil'?r2(Math.max(2.5,S.venue.h-.3)):r2(Math.max(0,Math.min(.5,S.venue.h-(+s.h||3)-.2)));if(/kind|src|grid/.test(m[2])||e.target.tagName==='SELECT')panel()}} if(/^people\.\d+\.(mode|role)$/.test(p))panel(); if(/^rigs\.\d+\.sys$/.test(p)){const r=S.rigs[+p.split('.')[1]],f=FR[r.sys];Object.assign(r,{bay:f.d[0],dep:f.d[1],lift:f.d[2]});panel()}else if(/^rigs\.\d+\.(bays|bay|dep|lifts|lift)$/.test(p)&&e.target.tagName==='SELECT')panel(); if(/^lights\.\d+\.(x|z)$/.test(p)){snapLight(S.lights[+p.split('.')[1]]);panel()} if(/^cams\.\d+\.(lens|ext|body)$/.test(p)){const c=S.cams[+p.split('.')[1]],isM=!!(LENSES[c.lens]||{}).mft;
     if(p.endsWith('.lens')){if(isM)c.body='st4k_mft';else if(c.body==='st4k_mft')c.body='st4k'}   // MFT 렌즈는 스튜디오 카메라에만
     if(p.endsWith('.body')){if(c.body==='st4k_mft'&&!isM)c.lens='mft14';else if(c.body!=='st4k_mft'&&isM)c.lens='xa20'}
     c.f=camF(c);if(c.shot)setShot(c,c.shot);panel()} if(p==='seats.layout'){if(v==='round')Object.assign(S.seats,{rows:3,cols:4,perTable:10});else if(v==='class')Object.assign(S.seats,{rows:5,cols:4,perTable:3});else if(v==='tier')Object.assign(S.seats,{rows:9,cols:12});else Object.assign(S.seats,{rows:4,cols:12});panel()} build();
 });
 document.addEventListener('change',async e=>{
+  {const m=/^rigs\.(\d+)\.(x|z|rot|dep|bay|bays)$/.exec(e.target.dataset.p||'');if(m&&S.rigs[+m[1]]&&S.rigs[+m[1]].kind==='frame'){stickFrame(S.rigs[+m[1]]);panel();build()}}
   if(e.target.id==='pcat'){pickCat=e.target.value;panel()}
-  if(e.target.id==='lookfile'&&e.target.files[0])lookFromPhoto(e.target.files[0]);
-  if(e.target.id==='loadscene'&&e.target.value){const name=e.target.value;
-    try{const r=await fetch('api/scenes/'+encodeURIComponent(name));if(!r.ok)throw 0;const miss=restore(await r.json());sceneName=name;view='3d';
-      smsg=`「${name}」을 불러왔습니다.`+(miss.length?` 목록에서 사라진 비품 ${miss.length}개는 빠졌습니다.`:'');panel();build()}
-    catch(err){say('불러오지 못했습니다.')}}
+  if(e.target.id==='mfile'&&e.target.files[0])mediaUpload(e.target.files[0]);
+  if(e.target.id==='mapfile'&&e.target.files[0])pixelMap(e.target.files[0]);
+  if(e.target.id==='sharemv')shareRefresh();
+  if(/^media\.surfaces\.\d+\.(w|h|px|py)$/.test(e.target.dataset.p||''))panel();   // 1m당 픽셀 안내 다시 계산
+  if(e.target.id==='lookfile'&&e.target.files[0])lookFromPhoto([...e.target.files].slice(0,8));
+  if(e.target.id==='loadscene'&&e.target.value)loadScene(e.target.value);
 });
 function snap(v){   // 그 보기 화면을 그림으로 (카메라 화면은 16:9로 잘라서)
   const keep=view;view=v;applyView();renderer.render(scene,camera);const cv=renderer.domElement;let url;
@@ -313,38 +485,70 @@ function snap(v){   // 그 보기 화면을 그림으로 (카메라 화면은 16
 function showSheet(){
   const top=snap('top'),title=sceneName.trim()||S.venue.name||'행사',sw=+S.screen.cw>0?+S.screen.cw:r2(Math.round(S.screen.n)*LEDW);
   const rows=S.cams.map((c,i)=>{const D=camPos(c).distanceTo(camAim(c)),f=camF(c),SH=camSH(c),[lo,hi,l]=lensR(c),base=camBase(c),bd=BODIES[c.body]||BODIES.g2_4k,maxB=hi*.7/SH;
-    return `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${camCol(c,i)};border:1px solid #999;vertical-align:-1px;margin-right:5px"></span><b>${esc(c.name)}</b></td><td><img src="${snap('cam'+i)}"></td><td>좌우 ${c.x>0?'오른쪽 ':c.x<0?'왼쪽 ':''}${Math.abs(c.x)}m<br>LED·무대에서 ${c.dist}m${base?`<br>객석 단 위 (+${r1(base)}m)`:'<br>바닥'}<br>렌즈 높이 ${r1(c.h+base)}m<br>방향: ${camTurn(c)?'발표자에서 '+camTurn(c):'발표자 정면 조준'}</td>
+    return `<tr><td><span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:${camCol(c,i)};border:1px solid #999;vertical-align:-1px;margin-right:5px"></span><b>${esc(c.name)}</b></td><td><img src="${snap('cam'+i)}"></td><td>좌우 ${c.x>0?'오른쪽 ':c.x<0?'왼쪽 ':''}${Math.abs(c.x)}m<br>LED·무대에서 ${c.dist}m${base?`<br>객석 단 위 (+${r1(base)}m)`:'<br>바닥'}${+c.riser?`<br>카메라 단 ${c.riser}mm · ${({split:'1800×900 2장(앞뒤 분리)',s18:'1800×1800 한 판',s15:'1500×1500 한 판'})[c.rtype||'split']}${+c.stairs?' · 계단':''}`:''}<br>렌즈 높이 ${r1(c.h+base)}m<br>방향: ${camTurn(c)?'발표자에서 '+camTurn(c):'발표자 정면 조준'}</td>
     <td>${bd.n}<br>${l.n}${c.ext?' + 2배 익스텐더':''}<br>${r1(lo)}~${Math.round(hi)}mm</td><td>발표자까지 <b>${r1(D)}m</b><br>지금 ${Math.round(f)}mm → <b>${shotName(D*SH/f)}</b><br>가장 넓게: 가로 ${r1(D*camSW(c)/lo)}m<br>가장 당기면: ${shotName(D*SH/hi)}</td>
     <td>${D<=maxB?'바스트 가능':'<b style="color:#c0392b">바스트 불가</b>'}<br>(이 조합은 ${r1(maxB)}m 안에서 바스트)${l.ok&&bd.ok?'':'<br><span style="color:#b9770e">렌즈·센서 값 일부 가정</span>'}</td></tr>`}).join('');
   document.body.insertAdjacentHTML('beforeend',`<div id="sheetbox"><div class="paper"><div class="noprint" style="display:flex;gap:8px;justify-content:flex-end"><button id="printsheet">인쇄 · PDF로 저장</button><button id="closesheet">닫기</button></div>
   <h1>카메라 배치표</h1><div class="meta"><b>${esc(title)}</b>${whenTxt()?' · '+esc(whenTxt()):''} · ${esc(S.venue.name||'행사장')} · 공간 ${S.venue.w} × ${S.venue.d}m, 높이 ${S.venue.h}m${S.venue.status==='추정'?' (사진으로 어림한 크기 · 실측 필요)':''}<br>
-  LED ${sw}m × ${S.screen.h}m · 발표자 ${G.sit?'테이블에 앉음':'서서'} · 객석 ${({theater:'일자',curve:'부채꼴',chevron:'V자',round:'원탁',class:'강의식',tier:'계단식'})[S.seats.layout||'theater']} · 카메라 ${S.cams.length}대</div>
+  LED ${sw}m × ${S.screen.h}m · 무대 위 ${S.people.map(pName).join('·')||'사람 없음'} · 객석 ${({theater:'일자',curve:'부채꼴',chevron:'V자',round:'원탁',class:'강의식',tier:'계단식'})[S.seats.layout||'theater']} · 카메라 ${S.cams.length}대</div>
   <img class="top" src="${top}"><table><thead><tr><th>카메라</th><th>잡히는 화면</th><th>설치 위치</th><th>본체 · 렌즈</th><th>샷</th><th>확인</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="meta" style="margin-top:10px">W플레이스로 만든 사전 시안입니다. 현장 실측과 리허설에서 다시 확인하세요.</div></div></div>`);
 }
+let SH={};   // 지금 공유 상자의 긴 링크·짧은 링크
+const shareUrl=()=>{const m=$('#sharemv');return (SH.short||SH.long||'')+(m&&m.checked?'&view=media':'')};
+function shareRefresh(){const u=shareUrl(),i=$('#sharelink');if(i)i.value=u;const a=document.querySelector('#sharebox a[target=_blank]');if(a)a.href=u}
 async function showShare(){
   let base='';try{base=localStorage.getItem('place-share-base')||''}catch(e){}
   if(!base)base=SHARE_BASE;
-  const code=await packScene({n:sceneName.trim(),s:serialize()}),here=location.origin+location.pathname,mk=b=>(b||here).replace(/#.*$/,'')+'#v='+code,local=/^(localhost|127\.|\[::1\])/.test(location.host);
+  const code=await packScene({n:sceneName.trim(),s:serialize(true)}),here=location.origin+location.pathname,mk=b=>(b||here).replace(/#.*$/,'')+'#v='+code,local=/^(localhost|127\.|\[::1\])/.test(location.host);
   document.body.insertAdjacentHTML('beforeend',`<div id="sharebox"><div class="in" style="max-width:640px"><div class="top"><h1>공유하기 (보기 전용)</h1><button id="closeshare">닫기</button></div>
   <div class="sub">이 링크를 받은 사람은 입체·위에서·객석·카메라별 화면과 카메라 배치표를 눌러 볼 수 있고, 배치를 바꾸지는 못합니다. 지금 화면의 배치가 링크 안에 그대로 담깁니다(나중에 고치면 링크를 새로 만들어야 합니다).</div>
-  <label>공유 링크<input id="sharelink" readonly value="${esc(mk(base))}"></label>
+  <label>공유 링크<input id="sharelink" readonly value=""></label>
+  ${S.media.surfaces.length?'<label style="display:flex;gap:8px;align-items:center;margin-top:8px;color:var(--text);font-size:13px"><input type="checkbox" id="sharemv" checked style="width:auto;margin:0"> 미디어월 시점으로 바로 열기</label>':''}
+  ${S.media.surfaces.some(s=>s.img||s.vimg)?'<div class="note" style="margin-top:8px">올린 이미지·영상 첫 장면은 <b>짧은 링크</b>에만 담깁니다. 위 긴 링크로 열면 그 면은 기본 물결 애니메이션으로 보입니다.</div>':''}
+  ${S.media.surfaces.some(s=>s.src==='video')?'<div class="note" style="margin-top:8px;border-color:#ffb347">영상은 링크로 보낼 수 없어 <b>첫 장면 사진</b>으로 대신 들어갑니다.</div>':''}
   <button class="wide" id="shortshare" style="margin-top:8px">짧은 링크로 만들기 (카카오톡용)</button>
   <div class="sub" id="shortmsg" style="margin:6px 0 0">짧은 링크는 배치 내용을 암호화해서 깃허브 공개 저장소에 올려 둡니다. 열쇠는 링크에만 들어 있어, 링크를 받은 사람만 볼 수 있습니다.</div>
-  <div class="row two" style="margin-top:8px"><button id="copyshare" class="on">링크 복사</button><a href="${esc(mk(base))}" target="_blank" rel="noopener" style="text-align:center;padding:7px;border:1px solid var(--line);border-radius:8px;text-decoration:none">보기 전용으로 열어 보기</a></div>
+  <div class="row two" style="margin-top:8px"><button id="copyshare" class="on">링크 복사</button><a href="#" target="_blank" rel="noopener" style="text-align:center;padding:7px;border:1px solid var(--line);border-radius:8px;text-decoration:none">보기 전용으로 열어 보기</a></div>
   ${local&&!base?'<div class="note" style="margin-top:10px;border-color:#ffb347"><b style="color:#ffb347">아직 이 맥 안에서만 열리는 주소입니다.</b><br>밖에 있는 사람에게 보내려면 W플레이스 보기 화면을 인터넷 주소에 올려야 합니다. 올린 뒤 아래 칸에 그 주소를 넣으면 링크가 그 주소로 만들어집니다.</div>':''}
   <label style="margin-top:10px">보기 화면이 올라가 있는 주소 (보통 그대로 두기)<input id="sharebase" placeholder="예: https://place.우리미디어주소" value="${esc(base)}"></label></div></div>`);
-  $('#sharebase').addEventListener('input',e=>{const b=e.target.value.trim();try{localStorage.setItem('place-share-base',b)}catch(x){}$('#sharelink').value=mk(b)});
+  SH={long:mk(base),short:null};shareRefresh();
+  $('#sharebase').addEventListener('input',e=>{const b=e.target.value.trim();try{localStorage.setItem('place-share-base',b)}catch(x){}SH.long=mk(b);shareRefresh()});
+}
+// 항목 목록: 큰 분류가 항상 보이고, 끌어다 놓거나(●) 설정 칸으로 이동(→)한다
+function renderPalette(){
+  const PAL=[['무대',[['go:stage','무대 데크 설정'],['go:presenter','발표자 · 사회자 · 포디움'],['go:seats','객석 배치']]],
+    ['LED',[['go:led','LED 화면 설정'],['rig:frame','LED 뒤 구조물','#b9bcc2'],['go:media','미디어아트 · 미디어월 (천장·벽면)']]],
+    ['구조물',[['rig:truss','트러스 290각','#b9bcc2'],['rig:batten','바턴 (파이프)','#b9bcc2'],['rig:layher','레이어 타워','#b9bcc2'],['rig:frame','레이어 · 아시바 구조물','#b9bcc2']]],
+    ['조명',[...Object.entries(LIGHTS).map(([k,l])=>['light:'+k,l.n,'#ffffff',1]),['rig:tbar','T바 스탠드 (세워서 쏘는 조명대)','#b9bcc2']]],
+    ['전기',[['board:main','배전반','#ffd23d'],['line:power','전원 간선',LINES.power.c],['line:signal','신호 · 영상 라인',LINES.signal.c]]],
+    ['중계',[['cam:xa20','카메라 (스탠다드 20배)','#D4F53C',1],['cam:xa55','카메라 (박스 렌즈 55배)','#D4F53C',1],['cam:x30','카메라 (대포 렌즈 30배)','#D4F53C',1],['cam:mft14','카메라 (광각 · 스튜디오 4K)','#D4F53C',1],['go:cams','카메라 단 · 오퍼레이터 설정']]],
+    ['콘솔 · 운영',Object.keys(TEAMC).map(k=>['con:'+k,k==='진행'?'진행(PD) 테이블':k+' 콘솔',TEAMC[k]])],
+    ['동선',[['line:path','입장 동선',LINES.path.c]]],
+    ['비품 · 점검',[['go:items','의자 · 테이블 등 비품'],['go:power','전기 · 동선 목록'],['go:safety','구조 · 안전 점검']]]];
+  $('#palette').innerHTML='<div class="sub" style="margin:0 0 6px">● 끌어다 화면에 놓기 · → 설정 칸으로</div>'+PAL.map(([n,its])=>`<details open><summary>${n}</summary>${its.map(([k,t,c,rd])=>k.startsWith('go:')?`<div class="pi lk" data-go="${k.slice(3)}"><span>→</span>${t}</div>`:`<div class="pi" data-new="${k}"><i class="${rd?'':'sq'}" style="background:${c||'#9aa0a8'}"></i>${t}</div>`).join('')}</details>`).join('');
+}
+async function showAdmin(){
+  let lic=[],ten=[];try{lic=await (await fetch('api/licenses')).json();ten=await (await fetch('api/tenants')).json()}catch(e){}
+  const link=k=>location.origin+'/?key='+k;
+  document.body.insertAdjacentHTML('beforeend',`<div id="adminbox" style="position:fixed;inset:0;background:rgba(5,6,15,.8);z-index:9;padding:20px;overflow:auto"><div style="max-width:900px;margin:0 auto;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px">
+  <div style="display:flex;justify-content:space-between;align-items:center"><h1>사용 키 · 다른 팀 자료</h1><button id="closeadmin">닫기</button></div>
+  <div class="sub">키를 받은 팀은 W플레이스를 쓸 수 있지만 우리가 저장한 행사와 직접 만든 행사장 자료는 볼 수 없습니다. 그 팀이 저장한 행사·행사장은 여기에 쌓이고 우리 「행사장 찾기」에도 들어옵니다. 처음 열 때 이 내용에 동의해야 저장할 수 있습니다.</div>
+  <div class="row two" style="margin:10px 0"><label>새 키를 줄 팀 이름<input id="licteam" placeholder="예: OO무대팀"></label><label>&nbsp;<button class="wide on" id="mklic">사용 키 만들기</button></label></div>
+  <table><thead><tr><th>팀</th><th>만든 날</th><th>상태</th><th>이용 안내 동의</th><th>저장</th><th>접속 주소</th><th></th></tr></thead><tbody>${lic.map(l=>`<tr><td><b>${esc(l.team)}</b></td><td>${esc(l.created||'')}</td><td style="color:${l.active?'#D4F53C':'#ff6b6b'}">${l.active?'사용 중':'중지'}</td><td>${l.agreed?esc(l.agreed):'<span style="color:#ffb347">아직</span>'}</td><td>행사 ${l.scenes} · 행사장 ${l.venues}</td>
+  <td><button data-cpkey="${esc(link(l.key))}" style="padding:3px 9px;font-size:12px">주소 복사</button></td><td><button data-lictog="${esc(l.key)}|${l.active?0:1}" style="padding:3px 9px;font-size:12px">${l.active?'중지':'다시 켜기'}</button></td></tr>`).join('')||'<tr><td colspan="7" style="color:var(--dim)">아직 만든 키가 없습니다.</td></tr>'}</tbody></table>
+  ${ten.filter(x=>x.scenes.length).map(x=>`<h2>${esc(x.team)}이 저장한 행사 ${x.scenes.length}건</h2>`+x.scenes.map(sc=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font-size:13px"><span style="flex:1">${esc(sc.name)}<span style="color:var(--dim)"> · ${esc(sc.venue||'행사장 미입력')} · ${esc(sc.date||sc.saved_at)}</span></span><button data-tsc="${x.id}|${esc(sc.name)}" style="padding:3px 9px;font-size:12px">불러와 보기</button></div>`).join('')).join('')}
+  <div class="note" style="margin-top:12px;border-color:#ffb347">지금 이 주소는 회사 네트워크 안에서만 열립니다. 밖에 있는 팀이 쓰게 하려면 서버를 인터넷에 여는 작업이 따로 필요합니다.</div></div></div>`);
 }
 function setShot(c,k){const sh=SHOTS.find(x=>x[0]===k);if(!sh)return;c.shot=k;const D=camPos(c).distanceTo(camAim(c));c.f=D*camSH(c)/sh[2];c.f=camF(c)}
-async function lookFromPhoto(file){
+async function lookFromPhoto(files){
   const msg=t=>{const e=$('#lookmsg');if(e)e.textContent=t};
-  try{msg('사진을 읽는 중입니다… (10~30초)');
-    const bm=await createImageBitmap(file),k=Math.min(1,1400/Math.max(bm.width,bm.height)),c=document.createElement('canvas');c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);
-    c.getContext('2d').drawImage(bm,0,0,c.width,c.height);const data=c.toDataURL('image/jpeg',.85).split(',')[1];
-    const r=await fetch('api/look',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({data,media_type:'image/jpeg'})}),j=await r.json().catch(()=>({}));
+  try{msg(`사진 ${files.length}장을 읽는 중입니다… (10~40초)`);const images=[];
+    for(const file of files){const bm=await createImageBitmap(file),k=Math.min(1,(files.length>1?1100:1400)/Math.max(bm.width,bm.height)),c=document.createElement('canvas');c.width=Math.round(bm.width*k);c.height=Math.round(bm.height*k);
+      c.getContext('2d').drawImage(bm,0,0,c.width,c.height);images.push({data:c.toDataURL('image/jpeg',.82).split(',')[1],media_type:'image/jpeg'})}
+    const r=await fetch('api/look',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({images})}),j=await r.json().catch(()=>({}));
     if(!r.ok)return msg(j.error||'사진을 읽지 못했습니다.');
-    S.venue.look=j.look;if(!S.venue.style)S.venue.style='hall';panel();build();msg('사진 느낌을 적용했습니다.');
+    S.venue.look=j.look;if(!S.venue.style)S.venue.style='hall';panel();build();msg(`사진 ${files.length}장으로 공간 느낌을 적용했습니다.`);
   }catch(e){msg('사진을 읽지 못했습니다. 다른 사진으로 해 보세요.')}
 }
 async function sceneAction(id){
@@ -380,8 +584,9 @@ document.addEventListener('click',async e=>{
   if(t.id==='closeshare')$('#sharebox').remove();
   if(t.id==='shortshare'){t.disabled=true;const m=$('#shortmsg'),say2=x=>{if(m)m.textContent=x};say2('암호화해서 올리는 중입니다…');
     const sealed=await sealScene({n:sceneName.trim(),s:serialize()});if(!sealed){say2('이 브라우저에서는 짧은 링크를 만들 수 없습니다.');t.disabled=false;return}
+    if(sealed.blob.length>7900000){say2('올린 이미지가 너무 커서 짧은 링크에 담을 수 없습니다. 면 해상도를 줄이거나 이미지를 빼 주세요.');t.disabled=false;return}
     try{const r=await fetch('api/share',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:sealed.id,blob:sealed.blob})}),j=await r.json().catch(()=>({}));if(!r.ok)throw j.error||'올리지 못했습니다.';
-      const url=SHARE_BASE+'#s='+sealed.id+'.'+sealed.key;$('#sharelink').value=url;const a=document.querySelector('#sharebox a[target=_blank]');if(a)a.href=url;$('#copyshare').textContent='링크 복사';
+      SH.short=SHARE_BASE+'#s='+sealed.id+'.'+sealed.key;shareRefresh();$('#copyshare').textContent='링크 복사';
       say2('짧은 링크를 만들었습니다. 깃허브에 반영되는 중이라 1분쯤 뒤부터 열립니다…');
       for(let k=0;k<30;k++){await new Promise(z=>setTimeout(z,5000));if(!$('#sharebox'))return;try{if((await fetch(SHARE_BASE+'s/'+sealed.id+'.txt',{cache:'no-store'})).ok){say2('이제 열립니다. 링크를 복사해서 보내세요.');return}}catch(e){}}
       say2('반영이 늦어지고 있습니다. 몇 분 뒤에 열어 보세요.')}
@@ -390,8 +595,20 @@ document.addEventListener('click',async e=>{
   if(t.id==='closesheet')$('#sheetbox').remove();
   if(t.id==='printsheet')window.print();
   if(t.id==='findvenue')showVenues();
-  if(t.id==='palbtn'){const p=$('#palette');p.classList.toggle('open');p.innerHTML=`<h3>조명 (끌어다 놓기)</h3>${Object.entries(LIGHTS).map(([k,l])=>`<div class="pi" data-new="light:${k}"><i></i>${l.n}</div>`).join('')}<h3>구조물</h3>${Object.entries(RIGS).map(([k,r])=>`<div class="pi" data-new="rig:${k}"><i class="sq"></i>${r.n}</div>`).join('')}<div class="sub" style="margin:6px 0 0">끌어서 화면에 놓거나, 한 번 누른 뒤 놓을 자리를 누르세요.</div>`}
+  if(t.id==='addframe'){const L=G.led||{};if(!L.sw){say('먼저 LED 크기를 넣어 주세요.');return}const f=newFrame('layher',0,0);S.screen.off=Math.max(+S.screen.off||1,r1(f.dep+.9));panel();build();
+    const L2=G.led;f.z=r2(L2.z-.1-f.dep/2-G.frontZ);f.stuck=1;S.rigs.push(f);panel();build();selectTag('rig:'+(S.rigs.length-1))}
+  if(t.dataset.mpre){const i=newMedia(MPRESET[t.dataset.mpre]);mMsg='';panel();build();selectTag('media:'+i)}
+  if(t.dataset.delmedia!==undefined){S.media.surfaces.splice(+t.dataset.delmedia,1);if(view==='media'&&!S.media.surfaces.length)view='3d';selectTag('');panel();build()}
+  if(t.dataset.mup){mUp=t.dataset.mup.split(',');const f=$('#mfile');f.accept=mUp[0]==='img'?'image/jpeg,image/png,image/webp':'video/*';f.value='';f.click()}
+  if(t.id==='mapbtn'){const f=$('#mapfile');f.value='';f.click()}
+  if(t.id==='warnchip')selectTag('safety');
+  if(t.id==='palbtn')$('#palette').classList.toggle('open');
+  if(t.dataset.go){selectTag(t.dataset.go)}
   if(t.dataset.delrig!==undefined){const k=+t.dataset.delrig;S.rigs.splice(k,1);S.lights.forEach(l=>{if(l.rig===k)l.rig=-1;else if(l.rig>k)l.rig--});selectTag('');panel();build()}
+  if(t.dataset.delcon!==undefined){S.consoles.splice(+t.dataset.delcon,1);selectTag('');panel();build()}
+  if(t.dataset.delboard!==undefined){S.boards.splice(+t.dataset.delboard,1);selectTag('');panel();build()}
+  if(t.dataset.delline!==undefined){S.lines.splice(+t.dataset.delline,1);selectTag('');panel();build()}
+  if(t.dataset.bend!==undefined){const l=S.lines[+t.dataset.bend],n=l.pts.length,a=l.pts[n-2],b=l.pts[n-1];l.pts.splice(n-1,0,[r1((a[0]+b[0])/2+.6),r1((a[1]+b[1])/2)]);panel();build()}
   if(t.dataset.dellight!==undefined){S.lights.splice(+t.dataset.dellight,1);selectTag('');panel();build()}
   if(t.dataset.lcol){const [i,k]=t.dataset.lcol.split(',');S.lights[+i].color=k;panel();build()}
   if(t.dataset.col){const [i,k]=t.dataset.col.split(',');S.cams[+i].color=k;panel();build()}
@@ -400,12 +617,25 @@ document.addEventListener('click',async e=>{
   if(t.id==='lookclear'){delete S.venue.look;panel();build()}
   if(t.id==='lookdims'){const e=S.venue.look.estimate;Object.assign(S.venue,{w:e.w,d:e.d,h:e.h});delete S.venue.name;panel();build()}
   if(t.id==='closev')$('#vbox').remove();
+  if(t.dataset.loadsc)loadScene(t.dataset.loadsc);
+  if(t.id==='agreebtn'){await fetch('api/agree',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'});ME.agreed=true;$('#agreebox').remove()}
+  if(t.id==='savevenue'){const nm=(S.venue.name||'').trim();if(!nm)return say('행사장 이름을 먼저 적어 주세요.');const [vn,...hl]=nm.split(' · ');
+    try{const r=await fetch('api/venues',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({venue:vn.trim(),hall:hl.join(' · ').trim()||'기본',w:S.venue.w,d:S.venue.d,h:S.venue.h,measured:+S.venue.measured?1:0,look:S.venue.look||null})}),j=await r.json().catch(()=>({}));
+      if(!r.ok)throw j.error||0;S.venue.status=+S.venue.measured?'확인':'추정';await loadVenues();smsg=`「${nm}」을 행사장 자료에 쌓았습니다. 「행사장 찾기」에서 다시 고를 수 있습니다.`;panel()}catch(err){say(typeof err==='string'?err:'행사장을 저장하지 못했습니다.')}}
+  if(t.id==='adminbtn')showAdmin();
+  if(t.id==='closeadmin')$('#adminbox').remove();
+  if(t.id==='mklic'){const team=$('#licteam').value.trim();if(!team)return;const r=await fetch('api/licenses',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({team})});if(r.ok){$('#adminbox').remove();showAdmin()}}
+  if(t.dataset.lictog){const [k,on]=t.dataset.lictog.split('|');await fetch('api/licenses/off',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:k,on:on==='1'})});$('#adminbox').remove();showAdmin()}
+  if(t.dataset.tsc){const [id,nm]=t.dataset.tsc.split('|');$('#adminbox').remove();await loadScene(nm,'api/tenants/'+id+'/scenes/'+encodeURIComponent(nm));sceneName='';smsg=`다른 팀의 「${nm}」을 불러왔습니다. 저장하면 우리 쪽에 새로 저장됩니다.`;panel()}
+  if(t.dataset.cpkey){(navigator.clipboard?navigator.clipboard.writeText(t.dataset.cpkey):Promise.reject()).catch(()=>{});t.textContent='복사했습니다'}
   if(t.id==='swapwd'){[S.venue.w,S.venue.d]=[S.venue.d,S.venue.w];panel();build()}
   if(t.dataset.vi!==undefined){vOpen=vOpen===+t.dataset.vi?-1:+t.dataset.vi;renderVenues()}
   if(t.dataset.hall){const [i,j]=t.dataset.hall.split(',').map(Number);useHall(i,j)}
   if(['savescene','newscene','delscene'].includes(t.id))sceneAction(t.id);
   if(t.id==='closecat')$('#catbox').remove();
-  if(t.id==='addcam'){S.cams.push({name:'CAM '+(S.cams.length+1),x:0,dist:6,h:1.7,lens:'xa20',f:20,ext:0,shot:''});panel();build()}
+  if(t.id==='addmc'||t.id==='addsp'){const mc=t.id==='addmc',same=S.people.filter(q=>q.role===(mc?'사회자':'발표자')).length;S.people.push({role:mc?'사회자':'발표자',mode:mc?'podn':'stand',x:mc?-(2.2+same*1.2):(same?1.4*same:0),tw:1800});panel();build();selectTag('ppl:'+(S.people.length-1))}
+  if(t.dataset.delppl!==undefined){const k=+t.dataset.delppl;S.people.splice(k,1);S.cams.forEach(c=>{if(+c.who===k)c.who=-1;else if(+c.who>k)c.who--});selectTag('');panel();build()}
+  if(t.id==='addcam'){S.cams.push({name:'CAM '+(S.cams.length+1),x:0,dist:6,h:1.7,lens:'xa20',f:20,ext:0,shot:'',riser:0,stairs:0,op:0});panel();build()}
   if(t.id==='save'){renderer.render(scene,camera);const a=document.createElement('a');a.download='W플레이스_'+(sceneName.trim()||'시안')+'_'+view+'.png';a.href=renderer.domElement.toDataURL('image/png');a.click()}
 });
 
@@ -439,6 +669,10 @@ const R=Math.random,TX={
   panel:tex(256,(g,s)=>{speck(g,s,'#cdc5b6',1800,.04);g.fillStyle='rgba(0,0,0,.14)';g.fillRect(0,0,3,s);g.fillStyle='rgba(255,255,255,.3)';g.fillRect(3,0,2,s)}),
   ceil:tex(256,(g,s)=>{speck(g,s,'#ebe8e1',1200,.03);g.strokeStyle='rgba(0,0,0,.13)';g.lineWidth=2;g.strokeRect(0,0,s,s)})};
 let tmpTex=[];const rp=(t,x,y)=>{const c=t.clone();c.needsUpdate=true;c.repeat.set(Math.max(1,x),Math.max(1,y));tmpTex.push(c);return c};
+function boardTex(text,ratio){const W=512,H=Math.round(W/ratio),c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
+  g.fillStyle='#ffffff';g.fillRect(0,0,W,H);g.fillStyle='#0B0D1E';g.fillRect(0,0,W,H*.16);g.fillStyle='#D4F53C';g.fillRect(0,H*.16,W,H*.03);
+  g.fillStyle='#16181f';g.textAlign='center';g.textBaseline='middle';const t=text||'행사 타이틀';let fs=Math.round(H*.3);g.font=`700 ${fs}px Pretendard,sans-serif`;while(g.measureText(t).width>W*.9&&fs>18){fs-=4;g.font=`700 ${fs}px Pretendard,sans-serif`}g.fillText(t,W/2,H*.6);
+  const tx=new THREE.CanvasTexture(c);tx.encoding=THREE.sRGBEncoding;tmpTex.push(tx);return tx}
 function ledTex(text,ratio){const W=1024,H=Math.max(128,Math.round(W*ratio)),c=document.createElement('canvas');c.width=W;c.height=H;const g=c.getContext('2d');
   const gr=g.createLinearGradient(0,0,W,H);gr.addColorStop(0,'#0a1250');gr.addColorStop(.55,'#43167a');gr.addColorStop(1,'#c2246f');g.fillStyle=gr;g.fillRect(0,0,W,H);
   const rg=g.createRadialGradient(W*.8,H*.15,0,W*.8,H*.15,W*.5);rg.addColorStop(0,'rgba(212,245,60,.35)');rg.addColorStop(1,'rgba(212,245,60,0)');g.fillStyle=rg;g.fillRect(0,0,W,H);
@@ -483,14 +717,14 @@ function tier(t,zBack){
   }
   return {n:cols*rows,w:W,d:D,h};
 }
-function person(x,y,z,m){
-  const add=(geo,mm,px,py,pz)=>{const o=new THREE.Mesh(geo,mm);o.position.set(x+px,y+py,z+pz);o.castShadow=true;dyn.add(o);return o};
+function person(x,y,z,m,par){
+  const add=(geo,mm,px,py,pz)=>{const o=new THREE.Mesh(geo,mm);o.position.set(x+px,y+py,z+pz);o.castShadow=true;(par||dyn).add(o);return o};
   for(const sx of[-1,1]){add(new THREE.CylinderGeometry(.075,.06,.84,10),mat.dark,sx*.09,.42,0);add(new THREE.CylinderGeometry(.05,.042,.58,8),m,sx*.25,1.1,0)}
   add(new THREE.CylinderGeometry(.2,.16,.58,16),m,0,1.12,0);add(new THREE.SphereGeometry(.2,16,10),m,0,1.4,0).scale.set(1,.45,.75);
   add(new THREE.CylinderGeometry(.045,.05,.1,8),mat.skin,0,1.5,0);add(new THREE.SphereGeometry(.115,16,12),mat.skin,0,1.64,0);
 }
-function personSit(x,y,z,m){   // +z(객석) 쪽을 보고 앉음
-  const add=(geo,mm,px,py,pz)=>{const o=new THREE.Mesh(geo,mm);o.position.set(x+px,y+py,z+pz);o.castShadow=true;dyn.add(o);return o};
+function personSit(x,y,z,m,par){   // +z(객석) 쪽을 보고 앉음
+  const add=(geo,mm,px,py,pz)=>{const o=new THREE.Mesh(geo,mm);o.position.set(x+px,y+py,z+pz);o.castShadow=true;(par||dyn).add(o);return o};
   for(const sx of[-1,1]){add(new THREE.BoxGeometry(.13,.13,.45),mat.dark,sx*.1,.52,.2);add(new THREE.CylinderGeometry(.06,.055,.46,10),mat.dark,sx*.1,.23,.42);add(new THREE.CylinderGeometry(.05,.042,.5,8),m,sx*.25,.78,.05)}
   add(new THREE.CylinderGeometry(.2,.17,.55,16),m,0,.8,0);add(new THREE.SphereGeometry(.2,16,10),m,0,1.07,0).scale.set(1,.45,.75);
   add(new THREE.CylinderGeometry(.045,.05,.1,8),mat.skin,0,1.16,0);add(new THREE.SphereGeometry(.115,16,12),mat.skin,0,1.3,0);
@@ -514,27 +748,49 @@ function lightPos(l){const fz=G.frontZ||0,r=S.rigs[l.rig];let x=+l.x||0,z=fz+(+l
   if(r){if(r.kind==='layher'){x=r.x;z=fz+r.z+.62;y=Math.min(Math.max(.5,+l.h||r.h-.4),r.h)}else{const [ax,az]=rigAxis(r),t=Math.max(-r.len/2,Math.min(r.len/2,+l.t||0));x=r.x+ax*t;z=fz+r.z+az*t;y=r.h-(r.kind==='truss'?.18:.03)-.26;hang=true}}
   return {x,y,z,hang,v:new THREE.Vector3(x,y,z)}}
 function snapLight(l){let best=-1,bd=.9,bt=0;S.rigs.forEach((r,i)=>{const dx=l.x-r.x,dz=l.z-r.z;
+    if(r.kind==='frame')return;
     if(r.kind==='layher'){const dd=Math.hypot(dx,dz);if(dd<1.3&&dd-.5<bd){best=i;bd=dd-.5;bt=0}}
     else{const [ax,az]=rigAxis(r),t=dx*ax+dz*az,perp=Math.abs(-dx*az+dz*ax);if(Math.abs(t)<=r.len/2+.4&&perp<bd){best=i;bd=perp;bt=t}}});
   const was=l.rig;l.rig=best;l.t=r1(bt);if(best!==was)l.aim=best>=0?'stage':'up';if(best>=0&&S.rigs[best].kind==='layher'&&!(l.h>.5))l.h=r1(S.rigs[best].h-.4)}
 function floorHit(cx,cy,y=0){const r=renderer.domElement.getBoundingClientRect();if(cx<r.left||cx>r.right||cy<r.top||cy>r.bottom)return null;
   ray.setFromCamera(new THREE.Vector2((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height)*2+1),camera);const v=new THREE.Vector3();return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-y),v)?v:null}
 function addNew(spec,hp){const [kind,type]=spec.split(':'),fz=G.frontZ||0,x=r1(hp.x),z=r1(hp.z-fz);let tag;
-  if(kind==='rig'){S.rigs.push({kind:type,x,z,len:6,h:type==='layher'?4:Math.max(2.5,Math.min(5,r1(S.venue.h-1))),rot:0});tag='rig:'+(S.rigs.length-1)}
+  if(kind==='board'){S.boards.push({x,z});tag='board:'+(S.boards.length-1)}
+  else if(kind==='con'){S.consoles.push({team:type,x,z,rot:0,n:1,w:1800});tag='con:'+(S.consoles.length-1)}
+  else if(kind==='cam'){const m=!!(LENSES[type]||{}).mft,lo=(LENSES[type]||LENSES.xa20).w;S.cams.push({name:'CAM '+(S.cams.length+1),x,dist:z,h:1.7,body:m?'st4k_mft':'g2_4k',lens:type,f:lo*2,ext:0,shot:'',riser:0,stairs:0,op:0});tag='cam:'+(S.cams.length-1)}
+  else if(kind==='rig'&&type==='tbar'){S.rigs.push({kind:'tbar',x,z,len:1.2,h:3,rot:0});tag='rig:'+(S.rigs.length-1)}
+  else if(kind==='line'){S.lines.push({kind:type,cover:'none',pts:[[r1(x-2),z],[r1(x+2),z]]});tag='line:'+(S.lines.length-1)}
+  else if(kind==='rig'&&type==='frame'){S.rigs.push(newFrame('layher',x,z));tag='rig:'+(S.rigs.length-1)}
+  else if(kind==='rig'){S.rigs.push({kind:type,x,z,len:6,h:type==='layher'?4:Math.max(2.5,Math.min(5,r1(S.venue.h-1))),rot:0});tag='rig:'+(S.rigs.length-1)}
   else{const l={type,x,z,h:.3,color:'#ffffff',rig:-1,t:0,aim:'up'};snapLight(l);S.lights.push(l);tag='light:'+(S.lights.length-1)}
   panel();build();selectTag(tag)}
-function tagY(t){const i=+t.split(':')[1];if(t.startsWith('rig:'))return S.rigs[i].kind==='layher'?0:+S.rigs[i].h;if(t.startsWith('light:'))return lightPos(S.lights[i]).y;if(t.startsWith('cam:'))return camPos(S.cams[i]).y;return 0}
-function moveTag(t,hp){const i=+t.split(':')[1],fz=G.frontZ||0,x=r1(hp.x),z=r1(hp.z-fz);
+function tagY(t){const i=+t.split(':')[1];if(t.startsWith('media:')){const s=S.media.surfaces[i];return +s.y||0}if(/^(board|line|lpt|con):/.test(t))return 0;if(t.startsWith('ppl:'))return G.ph||0;if(t.startsWith('rig:')&&S.rigs[i].kind==='tbar')return 0;if(t.startsWith('rig:'))return S.rigs[i].kind==='layher'||S.rigs[i].kind==='frame'?0:+S.rigs[i].h;if(t.startsWith('light:'))return lightPos(S.lights[i]).y;if(t.startsWith('cam:'))return camPos(S.cams[i]).y;return 0}
+const MOVABLE=/^(cam|item|light|rig|board|line|lpt|con|ppl|media):/;
+function tagXZ(t){const i=+t.split(':')[1],fz=G.frontZ||0,o=t.startsWith('media:')?[+S.media.surfaces[i].x||0,+S.media.surfaces[i].z||0]:t.startsWith('cam:')?[S.cams[i].x,fz+S.cams[i].dist]:t.startsWith('item:')?[S.items[i].x,fz+S.items[i].z]:t.startsWith('rig:')?[S.rigs[i].x,fz+S.rigs[i].z]:t.startsWith('board:')?[S.boards[i].x,fz+S.boards[i].z]:t.startsWith('con:')?[S.consoles[i].x,fz+S.consoles[i].z]:t.startsWith('ppl:')?[S.people[i].x,G.pz||0]:null;
+  if(o)return o;if(t.startsWith('light:')){const P=lightPos(S.lights[i]);return [P.x,P.z]}if(t.startsWith('lpt:')){const q=S.lines[i].pts[+t.split(':')[2]];return [q[0],fz+q[1]]}
+  if(t.startsWith('line:')){const l=S.lines[i],n=l.pts.length;return [l.pts.reduce((a,q)=>a+q[0],0)/n,fz+l.pts.reduce((a,q)=>a+q[1],0)/n]}return null}
+// LED 뒤 구조물: LED 뒷면에 5cm 띄워 딱 붙이고, LED와 겹치는 자리에는 둘 수 없게 한다
+function stickFrame(r,center){const L=G.led;if(!L||!L.sw||r.kind!=='frame')return;if(Math.abs((((+r.rot||0)%180)+180)%180)>=1){r.stuck=0;return}
+  const q=frDim(r),flush=r2(L.z-.1-q.D/2-(G.frontZ||0)),dz=r.z-flush;
+  if(Math.abs(r.x)<q.W/2+L.sw/2&&dz>-.8&&dz<q.D+.6){r.z=flush;r.stuck=1;if(center&&Math.abs(r.x)<.25)r.x=0}else r.stuck=0}   // 끌어다 놓을 때만 가운데로 맞춘다 (방향키·숫자는 그대로)
+function moveTag(t,hp,rd=r1){const i=+t.split(':')[1],fz=G.frontZ||0,x=rd(hp.x),z=rd(hp.z-fz);
+  if(t.startsWith('media:')){const s=S.media.surfaces[i];s.x=x;s.z=rd(hp.z);return}   // 미디어 면은 행사장 가운데 기준
+  if(t.startsWith('board:')){S.boards[i].x=x;S.boards[i].z=z;return}
+  if(t.startsWith('con:')){S.consoles[i].x=x;S.consoles[i].z=z;return}
+  if(t.startsWith('ppl:')){S.people[i].x=x;return}
+  if(t.startsWith('lpt:')){S.lines[i].pts[+t.split(':')[2]]=[x,z];return}
+  if(t.startsWith('line:')){const l=S.lines[i],n=l.pts.length,cx=l.pts.reduce((a,p)=>a+p[0],0)/n,cz=l.pts.reduce((a,p)=>a+p[1],0)/n;l.pts=l.pts.map(p=>[r1(p[0]+x-cx),r1(p[1]+z-cz)]);return}
   if(t.startsWith('cam:')){S.cams[i].x=x;S.cams[i].dist=z}else if(t.startsWith('item:')){S.items[i].x=x;S.items[i].z=z}
-  else if(t.startsWith('rig:')){S.rigs[i].x=x;S.rigs[i].z=z}else if(t.startsWith('light:')){const l=S.lights[i];l.x=x;l.z=z;l.rig=-1}}
+  else if(t.startsWith('rig:')){S.rigs[i].x=x;S.rigs[i].z=z;stickFrame(S.rigs[i],rd===r1)}else if(t.startsWith('light:')){const l=S.lights[i];l.x=x;l.z=z;l.rig=-1}}
 let armed='';
 // ── 화면에서 눌러 고르기: 그릴 때 물체마다 무엇인지(무대·LED·객석·카메라…) 표시해 둔다
 let _ti=[0,0],_tt='',selTag='';const ray=new THREE.Raycaster();
 const HITM=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});
 function hitBox(p,w,h,d,x,y,z){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),HITM);o.position.set(x,y,z);o.userData.hit=true;p.add(o)}   // 가는 물체도 잘 눌리게 하는 보이지 않는 손잡이
 function tagTo(next){[dyn,helpers].forEach((g,k)=>{for(let i=_ti[k];i<g.children.length;i++)g.children[i].userData.sel=_tt;_ti[k]=g.children.length});_tt=next}
-const SELNAME=t=>t.startsWith('rig:')?(S.rigs[+t.slice(4)]?RIGS[S.rigs[+t.slice(4)].kind].n+' '+(+t.slice(4)+1):''):t.startsWith('light:')?(S.lights[+t.slice(6)]?LIGHTS[S.lights[+t.slice(6)].type].n+' '+(+t.slice(6)+1):''):t.startsWith('cam:')?(S.cams[+t.slice(4)]||{}).name:t.startsWith('item:')?(CAT[(S.items[+t.slice(5)]||{}).id]||{}).name:({stage:'무대',led:'LED 화면',presenter:'발표자',seats:'객석'})[t];
-function selectTag(t){selTag=t;const chip=$('#selchip');chip.textContent=t?'선택: '+(SELNAME(t)||''):'';chip.style.display=t?'block':'none';
+const SECN={stage:'무대',led:'LED 화면',presenter:'발표자 · 사회자',seats:'객석',items:'비품',cams:'카메라',lights:'조명 · 구조물',power:'전기 · 동선',consoles:'콘솔 · 운영',safety:'구조 · 안전 점검',media:'미디어아트 · 미디어월'};
+const SELNAME=t=>t.startsWith('media:')?(S.media.surfaces[+t.slice(6)]?MKIND[S.media.surfaces[+t.slice(6)].kind]+' '+(+t.slice(6)+1):''):SECN[t]?SECN[t]:t.startsWith('ppl:')?(S.people[+t.slice(4)]?pName(S.people[+t.slice(4)]):''):t.startsWith('con:')?((S.consoles[+t.slice(4)]||{}).team||'')+' 콘솔':t.startsWith('board:')?'배전반 '+(+t.slice(6)+1):t.startsWith('line:')?(S.lines[+t.slice(5)]?LINES[S.lines[+t.slice(5)].kind].n+' '+(+t.slice(5)+1):''):t==='safety'?'구조 · 안전 점검':t.startsWith('rig:')?(S.rigs[+t.slice(4)]?RIGS[S.rigs[+t.slice(4)].kind].n+' '+(+t.slice(4)+1):''):t.startsWith('light:')?(S.lights[+t.slice(6)]?LIGHTS[S.lights[+t.slice(6)].type].n+' '+(+t.slice(6)+1):''):t.startsWith('cam:')?(S.cams[+t.slice(4)]||{}).name:t.startsWith('item:')?(CAT[(S.items[+t.slice(5)]||{}).id]||{}).name:({stage:'무대',led:'LED 화면',presenter:'발표자',seats:'객석'})[t];
+function selectTag(t){t=t.replace(/^lpt:(\d+):.*/,'line:$1');selTag=t;const chip=$('#selchip');chip.textContent=t?'선택: '+(SELNAME(t)||'')+(MOVABLE.test(t)&&!VIEW?' · 방향키로 10cm씩 (Shift 50cm, ⌥ 1cm)':''):'';chip.style.display=t?'block':'none';
   document.querySelectorAll('.pick').forEach(e=>e.classList.remove('pick'));if(!t||VIEW)return;
   const e=document.querySelector(`[data-sec="${t}"]`);if(e){e.classList.add('pick');e.scrollIntoView({behavior:'smooth',block:'center'})}}
 
@@ -581,15 +837,28 @@ function build(){
     r.rotation.order='ZXY';r.rotation.set(Math.PI/2,0,-sd*ang);r.position.set(sd*rw/4,h+rise/2+.12,0);rg.add(r)}
   for(const sd of[-1,1]){const gbl=new THREE.Mesh(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(sd*w/2,h,-d/2),new THREE.Vector3(sd*w/2,h,d/2),new THREE.Vector3(sd*w/2,h+rise,0)]),new THREE.MeshBasicMaterial({color:0xcfcbc3,side:THREE.DoubleSide}));roof.add(gbl)}
   }
+  if(L&&Array.isArray(L.features)){const colM=M(0x5a5d66,{roughness:.9}),curM=M(0xffffff,{map:rp(ttex('curtain','#15151a'),2,1),roughness:1}),doorM=M(0x2a2c33),winM=new THREE.MeshBasicMaterial({color:0xcfe3f5,toneMapped:false});
+    const onWall=(wh,u,wd,ht,y,mt,dp=.06)=>{   // u: 그 벽을 따라 -1~1 위치
+      if(wh==='앞')box(wd,ht,dp,mt,u*(w/2-wd/2-.2),y,-d/2+dp/2+.01,dyn,false);else if(wh==='뒤')box(wd,ht,dp,mt,u*(w/2-wd/2-.2),y,d/2-dp/2-.01,roof,false);
+      else if(wh==='왼쪽')box(dp,ht,wd,mt,-w/2+dp/2+.01,y,u*(d/2-wd/2-.2),dyn,false);else if(wh==='오른쪽')box(dp,ht,wd,mt,w/2-dp/2-.01,y,u*(d/2-wd/2-.2),dyn,false)};
+    L.features.forEach(f=>{const n=Math.max(1,Math.min(8,Math.round(+f.count||1))),sp=k=>n===1?0:-.8+1.6*k/(n-1),sides=f.where==='가운데'||f.where==='천장'?['왼쪽','오른쪽']:[f.where];
+      if(f.type==='기둥')sides.forEach(sd=>{for(let k=0;k<Math.ceil(n/sides.length);k++)onWall(sd,sp(k)*(sides.length>1?.5:1),.6,h,h/2,colM,.6)});
+      else if(f.type==='커튼')sides.forEach(sd=>{for(const u of n>1?[-1,1]:[0])onWall(sd,u,Math.min(3,(sd==='앞'||sd==='뒤'?w:d)*.22),h-.3,(h-.3)/2,curM,.12)});
+      else if(f.type==='문')sides.forEach(sd=>{for(let k=0;k<n;k++)onWall(sd,sp(k),1,2.1,1.05,doorM)});
+      else if(f.type==='창문')sides.forEach(sd=>{for(let k=0;k<n;k++)onWall(sd,sp(k),1.6,1.4,1.9,winM,.03)});
+      else if(f.type==='고정 스크린')onWall(f.where==='뒤'?'뒤':'앞',0,Math.min(5,w*.4),Math.min(3,h*.45),h*.55,new THREE.MeshBasicMaterial({color:0xe6e9ef,toneMapped:false}),.04);
+      else if(f.type==='고정 스피커')for(const u of[-.75,.75])onWall('앞',u,.45,.7,Math.max(2.2,h-1.2),mat.dark,.4);
+      else if(f.type==='조명 바턴')for(let k=0;k<Math.min(4,Math.max(2,n));k++){const z=-d/2+2+k*Math.max(2,(d-4)/4);const b0=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,w*.8,8),mat.dark);b0.rotation.z=Math.PI/2;b0.position.set(0,h-.6,z);roof.add(b0)}})}
   tagTo('stage');
   // 무대
-  const sup=SUP[S.screen.sup],zBack=-d/2+Math.max(1,sup?sup.dep+.35:0),a=tier(S.tiers[0],zBack),b=tier(S.tiers[1],zBack+a.d);
+  const sup=null,zBack=-d/2+Math.max(.3,+S.screen.off||1),a=tier(S.tiers[0],zBack),b=tier(S.tiers[1],zBack+a.d);
   const frontZ=zBack+a.d+b.d,topH=Math.max(a.h||0,b.h||0),stageMidZ=zBack+(a.d+b.d)/2;
-  const PR=S.presenter||{mode:'stand',dist:2},noDeck=!a.n&&!b.n,sit=PR.mode==='table';
+  const tl0=[];
+  const PR=S.presenter||{mode:'stand',dist:2},noDeck=!a.n&&!b.n,PP=S.people||[],mainQ=PP.find(q=>q.role==='발표자')||PP[0],sit=!!mainQ&&mainQ.mode==='table';
   const pz=noDeck?zBack+(+PR.dist||0):b.n?zBack+a.d+b.d/2:zBack+a.d/2,ph=b.n?b.h:(a.h||0);
   const rects=[];if(a.n)rects.push([a.w/2,zBack,zBack+a.d,a.h]);if(b.n)rects.push([b.w/2,zBack+a.d,frontZ,b.h]);
   const floorY=(x,z)=>{for(const r of rects)if(Math.abs(x)<=r[0]&&z>=r[1]&&z<=r[2])return r[3];return 0};
-  G={frontZ,topH,stageMidZ,ph,pz,sit,aim:new THREE.Vector3(0,ph+(sit?.95:1.3),pz)};
+  G={frontZ,topH,stageMidZ,ph,pz,sit,led:null,people:PP.map(q=>({x:+q.x||0,y:ph,z:pz,sit:q.mode==='table'})),aim:new THREE.Vector3(mainQ?+mainQ.x||0:0,ph+(sit?.95:1.3),pz)};G.mainP=G.people[PP.indexOf(mainQ)]||null;
   $('#count').innerHTML=`${S.tiers[0].name} <b>${a.n}장</b> (${a.w}m × ${a.d}m)<br>${S.tiers[1].name} <b>${b.n}장</b> (${b.w}m × ${b.d}m)<br>데크 모두 <b>${a.n+b.n}장</b> · 전체 깊이 ${r2(a.d+b.d)}m`;
   const SK=S.screen.kind||'fold',cab=SK==='c55'||SK==='c510',UH=SK==='c510'?1:.5,cwid=cab?Math.max(.5,Math.round((+S.screen.cw||Math.round(S.screen.n)*LEDW)/.5)*.5):(+S.screen.cw>0?+S.screen.cw:0),UW=cwid?.5:LEDW,
     scrH=cab?Math.max(UH,Math.round(S.screen.h/UH)*UH):+S.screen.h,sw=cwid?r2(cwid):r2(Math.max(0,Math.round(S.screen.n))*LEDW),gap=Math.round((a.w-sw)*500),cabN=cab?Math.round(sw/.5)*Math.round(scrH/UH):0,
@@ -608,17 +877,27 @@ function build(){
       for(let k=0;k<=lifts;k++)for(const z of[zf,zb])box(W,.04,.04,mt,0,Math.max(.1,sup.lift*k),z,dyn,false)}
     const scr=new THREE.Mesh(new THREE.PlaneGeometry(sw,scrH-.02),new THREE.MeshBasicMaterial({map:ledTex(S.screen.text||'',scrH/sw),toneMapped:false}));scr.position.set(0,sy,zBack+a.d/2+.058);dyn.add(scr);
     const glow=new THREE.PointLight(0x8a7cff,.45,Math.max(10,sw*2.5));glow.position.set(0,sy,zBack+a.d/2+1.2);dyn.add(glow)}
+  G.led={sw:sw>0&&scrH>0?sw:0,top:r1((a.h||0)+scrH),z:zBack+a.d/2,h0:a.h||0};
+  if(S.screen.sup&&S.screen.sup!=='none'){const f=newFrame(S.screen.sup,0,0);f.z=r2(G.led.z-.1-f.dep/2-frontZ);f.stuck=1;S.rigs.push(f);S.screen.sup='none';queueMicrotask(panel)}   // 예전 방식(LED에 붙은 구조물)을 따로 놓는 구조물로 옮김
   tagTo('');
   // 무대 조명
   const spot=(x,z,int,sh)=>{const l=new THREE.SpotLight(0xfff0d8,int,0,Math.PI/5.5,.55,1);l.position.set(x,Math.max(h-.3,3.2),z);l.target.position.set(x*.35,topH,stageMidZ);l.castShadow=sh;if(sh){l.shadow.mapSize.set(1024,1024);l.shadow.bias=-.0005;l.shadow.radius=5}dyn.add(l,l.target)};
-  const stW=Math.max(a.w||0,b.w||0,3);if(a.n||b.n||PR.mode!=='none'){spot(-stW*.5,frontZ+4,1.25,true);spot(stW*.5,frontZ+4,1.25,false);spot(0,frontZ+6,.6,false)}
+  const stW=Math.max(a.w||0,b.w||0,3);if(a.n||b.n||PP.length){spot(-stW*.5,frontZ+4,1.25,true);spot(stW*.5,frontZ+4,1.25,false);spot(0,frontZ+6,.6,false)}
   tagTo('presenter');
-  // 발표자·보면대
-  if(sit){personSit(0,ph,pz,mat.suit);chair(dyn,0,ph,pz-.1,.46,.46,.9,chairMat('접이식'));   // 테이블에 앉은 발표자(객석을 봄)
-    box(1.8,.04,.75,cloth0,0,ph+.74,pz+.62);box(1.8,.72,.02,cloth0,0,ph+.37,pz+.99);for(const ax of[-1,1])box(.02,.72,.75,cloth0,ax*.9,ph+.37,pz+.62);
-    box(.3,.1,.02,M(0xffffff),0,ph+.81,pz+.9);box(.02,.25,.02,mat.dark,.35,ph+.88,pz+.75);   // 명패·마이크
-    label(`테이블 1.8×0.75m · LED 앞 ${r1(pz-zBack)}m`,0,ph+1.9,pz,.7)}
-  else if(PR.mode!=='none'&&(a.n||b.n||noDeck)){person(0,ph,pz,mat.shirt);box(.5,.03,.35,mat.dark,.7,ph+1.05,pz);box(.03,1.05,.03,mat.dark,.7,ph+.52,pz)}
+  // 발표자·사회자 (포디움 앞 보드에는 행사 타이틀)
+  {const title=S.screen.text||'',podM=M(0x2b2420,{roughness:.6}),pn={podw:0,podn:0},tbs=[];
+    PP.forEach((q,i)=>{tagTo('ppl:'+i);const x=+q.x||0,mc=q.role==='사회자',pm=mc?M(0x5b2a45):q.mode==='table'?mat.suit:mat.shirt,col=ROLEC[q.role]||'#ffffff';
+      if(q.mode==='table'){const tw=(+q.tw||1800)/1000;tbs.push(+q.tw||1800);personSit(x,ph,pz,pm);chair(dyn,x,ph,pz-.1,.46,.46,.9,chairMat('접이식'));
+        box(tw,.04,.75,cloth0,x,ph+.74,pz+.62);box(tw,.72,.02,cloth0,x,ph+.37,pz+.99);for(const ax of[-1,1])box(.02,.72,.75,cloth0,x+ax*tw/2,ph+.37,pz+.62);
+        box(.3,.1,.02,M(0xffffff),x,ph+.81,pz+.9);box(.02,.25,.02,mat.dark,x+.35,ph+.88,pz+.75)}
+      else{person(x,ph,pz,pm);
+        if(q.mode==='stand'){box(.5,.03,.35,mat.dark,x+.7,ph+1.05,pz);box(.03,1.05,.03,mat.dark,x+.7,ph+.52,pz)}
+        if(q.mode==='podw'||q.mode==='podn'){const W=q.mode==='podw'?.9:.6;pn[q.mode]++;box(W,1.1,.45,podM,x,ph+.55,pz+.5);box(W+.06,.04,.52,podM,x,ph+1.12,pz+.5);box(.015,.22,.015,mat.dark,x,ph+1.25,pz+.42);
+          const bd=new THREE.Mesh(new THREE.PlaneGeometry(W-.08,.55),new THREE.MeshBasicMaterial({map:boardTex(title,(W-.08)/.55),toneMapped:false}));bd.position.set(x,ph+.68,pz+.5+.227);dyn.add(bd)}}
+      hitBox(dyn,1,1.8,1.2,x,ph+.9,pz+.2);label(pName(q,i),x,ph+(q.mode==='table'?1.75:2.15),pz,.45,col)});
+    tagTo('presenter');
+    if(pn.podw)tl0.push(`포디움 넓은 것(900) <b>${pn.podw}개</b>`);if(pn.podn)tl0.push(`포디움 좁은 것(600) <b>${pn.podn}개</b>`);if(tbs.length)tl0.push(`발표 테이블 <b>${tbs.length}개</b> — ${tbs.map(v=>v+'×750').join(' · ')}`);
+    if(PP.length)tl0.push(`무대 위 사람 <b>${PP.length}명</b> — ${PP.map(pName).join(' · ')}`)}
   tagTo('seats');
   // 객석
   const sc=CAT[S.seats.chair],cw=sc?sc.w/1000:.44,cd=sc?sc.d/1000:.44,chh=sc?sc.h/1000:.9;let seatN=0;
@@ -649,21 +928,27 @@ function build(){
     for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const side=c<half?-1:1,k=c<half?half-1-c:c-half,u=sx*(k+.5);seat(side*(aisle/2+u*Math.cos(an)),zb+r*sz-u*Math.sin(an),side*an)}
   }else for(let r=0;r<rows;r++)for(let c=0;c<cols;c++){const side=c<half?-1:1,k=c<half?half-1-c:c-half;seat(side*(aisle/2+sx*(k+.5)),z0+r*sz,0)}
   // 놓은 비품
-  const tl=[`데크 <b>${a.n+b.n}장</b>`,`객석 의자(${sc?sc.name:'기본'}) <b>${seatN}개</b>`];if(tableN)tl.push(`객석 ${lay==='round'?'원탁':'책상'} <b>${tableN}개</b>`);
+  const tl=[...tl0,`데크 <b>${a.n+b.n}장</b>`,`객석 의자(${sc?sc.name:'기본'}) <b>${seatN}개</b>`];if(tableN)tl.push(`객석 ${lay==='round'?'원탁':'책상'} <b>${tableN}개</b>`);
   S.items.forEach((it,ii)=>{tagTo('item:'+ii);const c=CAT[it.id];if(!c||!c.ok)return;
     const nx=Math.max(1,Math.round(it.nx)||1),nz=Math.max(1,Math.round(it.nz)||1),gp=it.gap||0,w=c.w/1000,dd=c.d/1000;
     const g=new THREE.Group();g.position.set(it.x,floorY(it.x,frontZ+it.z),frontZ+it.z);g.rotation.y=-(it.rot||0)*Math.PI/180;dyn.add(g);
     for(let i=0;i<nx;i++)for(let j=0;j<nz;j++)drawItem(g,c,(i-(nx-1)/2)*(w+gp),0,(j-(nz-1)/2)*(dd+gp));
     tl.push(`${c.name} <b>${nx*nz}개</b>${c.sure?'':' <span style="color:#ffb347">(치수 미확인)</span>'}`)});
   tl.push(`카메라 <b>${S.cams.length}대</b>`,(cab?`LED 캐비닛 <b>${cabN}장</b> (${sw} × ${scrH}m)`:cwid?`LED 벽 <b>${sw} × ${scrH}m</b>`:`폴딩 LED <b>${Math.max(0,Math.round(S.screen.n))}대</b>`));
+  S.rigs.forEach(r=>{if(r.kind==='frame'&&r.stuck)stickFrame(r)});   // LED나 무대를 옮기면 붙어 있던 구조물도 따라간다
   // 구조물(바턴·트러스·레이어 타워)
   const metal=M(0xb9bcc2,{metalness:.7,roughness:.35});
   S.rigs.forEach((r,i)=>{tagTo('rig:'+i);const g=new THREE.Group();g.position.set(r.x,0,frontZ+r.z);g.rotation.y=-(+r.rot||0)*Math.PI/180;dyn.add(g);const H=Math.max(.5,+r.h||4),Ln=Math.max(.5,+r.len||6);
+    if(r.kind==='frame'){const q=frDim(r),nb=Math.max(1,+r.bays||1),nl=Math.max(1,+r.lifts||1),fm=M(r.sys==='asiba'?0x8a8f98:0xb9bcc2,{metalness:.65,roughness:.4});
+      for(let k=0;k<=nb;k++){const x=-q.W/2+r.bay*k;for(const az of[-1,1])box(.048,q.Hh,.048,fm,x,q.Hh/2,az*q.D/2,g);for(let j=0;j<=nl;j++)box(.04,.04,q.D,fm,x,Math.max(.12,r.lift*j),0,g,false)}
+      for(let j=0;j<=nl;j++)for(const az of[-1,1])box(q.W,.04,.04,fm,0,Math.max(.12,r.lift*j),az*q.D/2,g,false);
+      hitBox(g,q.W,q.Hh,q.D,0,q.Hh/2,0);label(`${FR[r.sys].n} ${i+1} · 가로 ${q.W} × 폭 ${q.D} × 높이 ${q.Hh}m`,r.x,q.Hh+.5,frontZ+r.z,.55);return}
     if(r.kind==='layher'){for(const ax of[-1,1])for(const az of[-1,1])box(.048,H,.048,metal,ax*.545,H/2,az*.545,g);for(let y=.2;y<=H+.01;y+=2)for(const k of[-1,1]){box(1.09,.04,.04,metal,0,Math.min(y,H),k*.545,g,false);box(.04,.04,1.09,metal,k*.545,Math.min(y,H),0,g,false)}}
     else if(r.kind==='truss'){for(const ay of[-1,1])for(const az of[-1,1])box(Ln,.05,.05,metal,0,H+ay*.12,az*.12,g);for(let x=-Ln/2;x<=Ln/2+.01;x+=.5)for(const az of[-1,1]){box(.025,.24,.025,metal,x,H,az*.12,g,false);box(.025,.025,.24,metal,x,H+az*.12,0,g,false)}}
+    else if(r.kind==='tbar'){const pl=new THREE.Mesh(new THREE.CylinderGeometry(.022,.028,H,10),mat.dark);pl.position.y=H/2;pl.castShadow=true;g.add(pl);box(Ln,.04,.04,mat.dark,0,H,0,g);for(let k=0;k<3;k++){const lg=box(.9,.03,.03,mat.dark,0,.25,0,g,false);lg.rotation.set(0,k*Math.PI*2/3,.5);lg.position.set(Math.cos(k*Math.PI*2/3)*.38,.2,-Math.sin(k*Math.PI*2/3)*.38)}hitBox(g,Ln,H,.7,0,H/2,0)}
     else{const b=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,Ln,10),mat.dark);b.rotation.z=Math.PI/2;b.position.y=H;b.castShadow=true;g.add(b)}
     if(r.kind==='layher')hitBox(g,1.1,H,1.1,0,H/2,0);else hitBox(g,Ln,.4,.4,0,H,0);
-    if(r.kind!=='layher')for(const k of[-1,1])box(.012,Math.max(.1,h-H),.012,mat.dark,k*Ln*.4,H+Math.max(.1,h-H)/2,0,g,false);
+    if(r.kind==='truss'||r.kind==='batten')for(const k of[-1,1])box(.012,Math.max(.1,h-H),.012,mat.dark,k*Ln*.4,H+Math.max(.1,h-H)/2,0,g,false);
     label(`${RIGS[r.kind].n} ${i+1}${r.kind==='layher'?'':' · '+Ln+'m'} · 높이 ${H}m`,r.x,H+.6,frontZ+r.z,.5)});
   // 조명
   const lightN={};
@@ -678,13 +963,109 @@ function build(){
     const cone=new THREE.Mesh(cg,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.1,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false}));
     cone.position.copy(P.v);cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,-1,0),T.clone().sub(P.v).normalize());helpers.add(cone)});
   Object.entries(lightN).forEach(([n,k])=>tl.push(`${n} <b>${k}대</b>`));
-  if(S.rigs.length){const rn={};S.rigs.forEach(r=>{const k=RIGS[r.kind].n;rn[k]=rn[k]||[0,0];rn[k][0]++;rn[k][1]+=r.kind==='layher'?0:(+r.len||0)});Object.entries(rn).forEach(([n,v])=>tl.push(`${n} <b>${v[0]}개</b>${v[1]?` (합 ${r1(v[1])}m)`:''}`))}
+  if(S.rigs.length){const rn={};S.rigs.forEach(r=>{const k=RIGS[r.kind].n;rn[k]=rn[k]||[0,0];rn[k][0]++;rn[k][1]+=r.kind==='layher'||r.kind==='frame'?0:(+r.len||0)});Object.entries(rn).forEach(([n,v])=>tl.push(`${n} <b>${v[0]}개</b>${v[1]?` (합 ${r1(v[1])}m)`:''}`))}
+  // 배전반·케이블 라인·입장 동선
+  const notes=[],note=(lv,t)=>notes.push([lv,t]),W2=(x,z)=>[x,frontZ+z];
+  // 미디어아트 · 미디어월 (발광 면: 조명 영향 없이 제 색으로)
+  MUSED=new Set();
+  S.media.surfaces.forEach((s,i)=>{tagTo('media:'+i);const W=Math.max(.25,+s.w||1),H=Math.max(.25,+s.h||1),ce=s.kind==='ceil',y0=+s.y||0,cy=ce?y0:y0+H/2,br=Math.max(5,Math.min(100,+s.bright||100))/100,g=new THREE.Group();
+    g.position.set(+s.x||0,cy,+s.z||0);g.rotation.y=-(+s.rot||0)*Math.PI/180;dyn.add(g);
+    const geo=new THREE.PlaneGeometry(W,H);   // 천장 면: 무대 쪽을 보고 올려다볼 때 그림 위쪽이 무대 쪽(픽셀맵에서 벽 바로 아래 줄이 천장 맨 위)
+    const mt=new THREE.MeshBasicMaterial({map:mediaTex(s,i),toneMapped:false});mt.color.setScalar(br);
+    const scr=new THREE.Mesh(geo,mt);if(ce)scr.rotation.x=Math.PI/2;g.add(scr);
+    if(ce)box(W+.06,.1,H+.06,mat.dark,0,.052,0,g,false);else box(W+.06,H+.06,.1,mat.dark,0,0,-.052,g,false);
+    if(+s.grid){const P=[],nx=Math.max(1,Math.round(W/.5)),ny=Math.max(1,Math.round(H/.5));for(let k=1;k<nx;k++){const u=-W/2+k*W/nx;P.push(u,-H/2,0,u,H/2,0)}for(let k=1;k<ny;k++){const v=-H/2+k*H/ny;P.push(-W/2,v,0,W/2,v,0)}
+      const lg=new THREE.BufferGeometry();lg.setAttribute('position',new THREE.Float32BufferAttribute(P,3));const ln=new THREE.LineSegments(lg,new THREE.LineBasicMaterial({color:0x000000,transparent:true,opacity:.4}));if(ce){ln.rotation.x=Math.PI/2;ln.position.y=-.004}else ln.position.z=.004;g.add(ln)}
+    if(ce){if(h-cy>.15)for(const ax of[-1,1])for(const az of[-1,1])box(.012,h-cy-.1,.012,mat.dark,ax*W*.42,(h-cy)/2+.05,az*H*.42,g,false)}   // 천장에 매다는 줄
+    else if(y0>.05)for(const ax of[-1,1])box(.08,y0,.3,mat.dark,ax*W*.42,-H/2-y0/2,-.15,g,false);   // 받침
+    hitBox(g,W,ce?.3:H,ce?H:.3,0,0,0);
+    const gl=new THREE.PointLight(0x9a8cff,.35*br,Math.max(6,W*1.2));gl.position.set(0,ce?-1:0,ce?0:1.2);g.add(gl);
+    label(`${MKIND[s.kind]} ${i+1} · ${W}×${H}m · ${Math.round(+s.px||0)}×${Math.round(+s.py||0)}`,+s.x||0,ce?cy+.5:y0+H+.45,+s.z||0,.6,'#ff5fa2');
+    tl.push(`미디어 ${MKIND[s.kind]} <b>${W}×${H}m</b> (${Math.round(+s.px||0)}×${Math.round(+s.py||0)}px${+s.grid?` · 500×500 캐비닛 약 ${Math.round(W/.5)*Math.round(H/.5)}장`:''})`);
+    const topY=ce?cy:y0+H;if(topY>h)note('stop',`${MKIND[s.kind]} ${i+1}: 높이 ${r1(topY)}m가 천장(${h}m)보다 높습니다.`);
+    if(ce)note('warn',`${MKIND[s.kind]} ${i+1}: 천장에 매다는 것으로 그렸습니다. LED 무게(약 ${Math.round(W*H*28)}kg, 1㎡당 28kg 가정)와 리깅 포인트·허용 하중을 행사장에 확인하세요.`)});
+  tagTo('');mediaPrune();
+  S.boards.forEach((bd,i)=>{tagTo('board:'+i);box(.6,1.6,.3,M(0x8b8f98,{metalness:.4,roughness:.5}),bd.x,.8,frontZ+bd.z);box(.5,.5,.02,M(0xffd23d),bd.x,1.15,frontZ+bd.z+.16,dyn,false);label('배전반 '+(i+1),bd.x,2,frontZ+bd.z,.45,'#ffd23d')});
+  S.consoles.forEach((c,i)=>{tagTo('con:'+i);const g=new THREE.Group(),n=Math.max(1,Math.min(4,Math.round(+c.n||1))),col=TEAMC[c.team]||'#ffffff';g.position.set(c.x,0,frontZ+c.z);g.rotation.y=Math.PI-(+c.rot||0)*Math.PI/180;dyn.add(g);   // 그룹의 +z 가 무대 쪽
+    const tw=(+c.w||1800)/1000;for(let k=0;k<n;k++){const x=(k-(n-1)/2)*(tw+.05);box(tw,.04,.75,cloth0,x,.74,.45,g);box(tw,.72,.02,cloth0,x,.37,.82,g);box(Math.min(.7,tw-.2),.12,.4,mat.dark,x,.82,.45,g);box(tw-.1,.03,.02,new THREE.MeshBasicMaterial({color:col,toneMapped:false}),x,.5,.835,g,false);
+      const sg=new THREE.Group();sg.position.set(x,0,-.25);sg.rotation.y=Math.PI;g.add(sg);chair(sg,0,0,0,.46,.46,.9,chairMat('접이식'));personSit(x,0,-.2,mat.dark,g)}
+    hitBox(g,n*(tw+.05),1.3,1.6,0,.65,.2);label(`${c.team||'콘솔'}${/콘솔|테이블/.test(c.team||'')?'':' 콘솔'} · ${(+c.w||1800)}${n>1?'×'+n:''}`,c.x,1.9,frontZ+c.z,.7,col)});
+  if(S.consoles.length)tl.push(`콘솔 테이블 <b>${S.consoles.reduce((t,c)=>t+Math.max(1,Math.min(4,Math.round(+c.n||1))),0)}개</b> — ${S.consoles.map(c=>`${c.team} ${(+c.w||1800)}×750${Math.round(+c.n||1)>1?' '+Math.round(c.n)+'개':''}`).join(' · ')}`);
+  const segBox=(p,q,wd,ht,mt,y)=>{const dx=q[0]-p[0],dz=q[1]-p[1],L=Math.hypot(dx,dz);if(L<.01)return;const o=box(L,ht,wd,mt,(p[0]+q[0])/2,y,frontZ+(p[1]+q[1])/2,dyn,false);o.rotation.y=-Math.atan2(dz,dx)};
+  S.lines.forEach((l,i)=>{const lc=LINES[l.kind],cm=new THREE.MeshBasicMaterial({color:lc.c,toneMapped:false,transparent:l.kind==='path',opacity:l.kind==='path'?.6:1});
+    tagTo('line:'+i);l.pts.forEach((p,k)=>{if(!k)return;const a=l.pts[k-1];
+      if(l.kind==='path')segBox(a,p,1.2,.012,cm,.012);else{segBox(a,p,.07,.035,cm,.02);if(l.cover==='mat')segBox(a,p,.9,.02,M(0x1c1d21,{roughness:1}),.045);if(l.cover==='jacket')segBox(a,p,.5,.07,M(0xf2c200,{roughness:.6}),.06)}
+      const dx=p[0]-a[0],dz=p[1]-a[1],hb=new THREE.Mesh(new THREE.BoxGeometry(Math.hypot(dx,dz),.3,l.kind==='path'?1.2:.6),HITM);hb.position.set((a[0]+p[0])/2,.15,frontZ+(a[1]+p[1])/2);hb.rotation.y=-Math.atan2(dz,dx);hb.userData.hit=true;dyn.add(hb)});
+    l.pts.forEach((p,k)=>{tagTo('lpt:'+i+':'+k);const h0=new THREE.Mesh(new THREE.SphereGeometry(.13,14,10),new THREE.MeshBasicMaterial({color:lc.c,toneMapped:false}));h0.position.set(p[0],.13,frontZ+p[1]);helpers.add(h0);hitBox(helpers,.5,.5,.5,p[0],.25,frontZ+p[1])});
+    tagTo('line:'+i);const m=l.pts[Math.floor((l.pts.length-1)/2)],m2=l.pts[Math.floor((l.pts.length-1)/2)+1]||m;label(`${lc.n} ${i+1} · ${r1(lineLen(l))}m`,(m[0]+m2[0])/2,.7,frontZ+(m[1]+m2[1])/2,.45,lc.c)});
+  tagTo('');
+  // 케이블이 입장 동선을 가로지르는 곳
+  const paths=S.lines.filter(l=>l.kind==='path');
+  S.lines.forEach((l,i)=>{if(l.kind==='path')return;let hit=0;l.pts.forEach((p,k)=>{if(!k)return;paths.forEach(pl=>pl.pts.forEach((q,j)=>{if(!j)return;const x=segX(l.pts[k-1],p,pl.pts[j-1],q);if(!x)return;hit++;
+      const done=l.cover&&l.cover!=='none';label(done?'✓ 마감됨':'! 마감 필요',x[0],1.5,frontZ+x[1],.5,done?'#5ff0c0':'#ff6b6b')}))});
+    if(hit){const cv=(COVERS.find(c=>c[0]===l.cover)||[])[1];note(l.cover&&l.cover!=='none'?'ok':'stop',`${LINES[l.kind].n} ${i+1}: 입장 동선을 ${hit}곳에서 가로지릅니다 — `+(l.cover&&l.cover!=='none'?`${cv}으로 마감하는 것으로 표시됨.`:'고무판이나 옐로우 자켓으로 마감해야 합니다.'))}});
+  if(S.lines.some(l=>l.kind!=='path')&&!paths.length)note('info','입장 동선을 그려 두면 케이블이 동선을 가로지르는 곳을 자동으로 찾아 줍니다.');
+  // 전기
+  {const ledW=cab?cabN*(SK==='c55'?150:300):0,ltW=S.lights.reduce((t,l)=>t+LP[l.type],0),tot=ledW+ltW;
+    if(tot){note(S.boards.length?'info':'warn',`필요 전력 약 <b>${r1(tot/1000)}kW</b> (조명 ${r1(ltW/1000)}kW${ledW?` + LED 캐비닛 ${r1(ledW/1000)}kW`:''}) — 단상 220V면 약 ${Math.round(tot/220)}A, 삼상 380V면 약 ${Math.round(tot/(1.732*380))}A. 여유 20~30%를 두고 배전반 용량과 간선 굵기를 확인하세요.`+(S.boards.length?'':' <b>배전반 위치가 아직 없습니다.</b>'));
+      if(sw&&!cab)note('info','폴딩 LED의 소비 전력은 제품 사양으로 따로 더해야 합니다.')}
+    const pl=S.lines.filter(l=>l.kind==='power'),sl=S.lines.filter(l=>l.kind==='signal'),sum=a2=>r1(a2.reduce((t,l)=>t+lineLen(l),0)),jk=S.lines.filter(l=>l.cover==='jacket'),mt2=S.lines.filter(l=>l.cover==='mat');
+    if(pl.length)tl.push(`전원 간선 <b>${sum(pl)}m</b> (여유 포함 약 ${Math.ceil(sum(pl)*1.15)}m)`);if(sl.length)tl.push(`신호·영상 라인 <b>${sum(sl)}m</b> (여유 포함 약 ${Math.ceil(sum(sl)*1.15)}m)`);
+    if(jk.length)tl.push(`옐로우 자켓 <b>약 ${Math.ceil(sum(jk)/.9)}개</b> (${sum(jk)}m, 1개 0.9m 기준)`);if(mt2.length)tl.push(`고무판 <b>${sum(mt2)}m</b>`);if(S.boards.length)tl.push(`배전반 <b>${S.boards.length}개</b>`)}
+  {const rs=S.cams.filter(c=>+c.riser);if(rs.length){const RN={split:'1800×900 2장(앞뒤 분리)',s18:'1800×1800 한 판',s15:'1500×1500 한 판'};tl.push(`카메라 단 <b>${rs.length}곳</b> — ${rs.map(c=>`${c.name} ${RN[c.rtype||'split']} · 높이 ${c.riser}mm`).join(' / ')}${rs.some(c=>+c.stairs)?` · 계단 ${rs.filter(c=>+c.stairs).length}개`:''}`);
+      rs.forEach(c=>{if(+c.riser>=1000)note('warn',`${c.name} 카메라 단 ${c.riser}mm: 뒤·옆에 난간을 두고, 오르내릴 계단과 데크 사이 연결(클램프)을 확인하세요.`);else if(!+c.stairs)note('info',`${c.name} 카메라 단 ${c.riser}mm: 오르내릴 계단이 표시돼 있지 않습니다.`)});
+      if(rs.some(c=>(c.rtype||'split')==='split'))note('info','앞뒤 분리형 카메라 단은 앞(카메라)·뒤(오퍼레이터) 데크를 10cm 띄워 발 디딤 흔들림이 카메라로 전달되지 않게 그렸습니다. 삼각대 다리 벌림(약 1m)이 900 폭 데크 안에 들어오는지 확인하세요.');if(rs.some(c=>(c.rtype||'split')!=='split'))note('info','한 판형 카메라 단은 오퍼레이터가 움직이면 흔들림이 카메라에 전달될 수 있습니다. 망원(박스 렌즈)으로 당길 때는 앞뒤 분리형이 유리합니다.')}}
+  // 구조물
+  S.rigs.forEach((r,i)=>{const nm=`${RIGS[r.kind].n} ${i+1}`,kg=Math.round(S.lights.filter(l=>l.rig===i).reduce((t,l)=>t+LW[l.type],0)*1.1),L=+r.len||0,H=+r.h||0;
+    if(r.kind==='frame'){const q=frDim(r),fn=`${FR[r.sys].n} ${i+1}`,Ld=G.led,rot0=Math.abs(((+r.rot||0)%180+180)%180)<1,fz2=frontZ+r.z,ra=q.Hh/q.D;
+      if(ra>4)note('stop',`${fn}: 높이 ${q.Hh}m ÷ 폭 ${q.D}m = ${r1(ra)}:1 — 폭이 좁습니다. 폭을 넓히거나 아웃리거·무게추·벽 고정이 필요합니다.`);else if(ra>3)note('warn',`${fn}: 높이 대 폭 ${r1(ra)}:1 — 무게추나 아웃리거로 넘어짐을 막으세요. 폭을 한 단계 넓히면 여유가 생깁니다.`);else note('ok',`${fn}: 높이 ${q.Hh}m, 폭 ${q.D}m (높이 대 폭 ${r1(ra)}:1).`);
+      if(q.Hh>h)note('stop',`${fn}: 높이 ${q.Hh}m가 천장(${h}m)보다 높습니다.`);
+      if(rot0){if(fz2-q.D/2<-d/2+.05)note('stop',`${fn}: 뒤쪽이 벽 밖으로 ${r1(-d/2-(fz2-q.D/2))}m 나갑니다. LED의 「뒤 벽에서 m」를 ${r1(q.D+.9)} 이상으로 늘리거나 폭을 줄이세요.`);if(Math.abs(r.x)+q.W/2>w/2)note('stop',`${fn}: 가로 ${q.W}m가 행사장 폭을 벗어납니다.`)}
+      if(Ld&&Ld.sw&&rot0&&Math.abs(fz2-Ld.z)<q.D/2+3){const gapz=r2(Ld.z-.05-(fz2+q.D/2));
+        if(gapz<.03)note('stop',`${fn}: LED 화면과 겹칩니다(${r1(-gapz)}m). 구조물을 뒤로 빼거나 LED를 앞으로 내세요.`);else if(gapz>.6)note('warn',`${fn}: LED 뒷면과 ${r1(gapz)}m 떨어져 있어 브라켓이 닿지 않을 수 있습니다.`);else note('ok',`${fn}: LED 뒷면과 ${Math.round(gapz*100)}cm 간격.`);
+        const lack=r2(Ld.sw/2-(q.W/2-Math.abs(r.x)));if(lack>.05)note('warn',`${fn}: 가로 ${q.W}m가 LED 가로 ${Ld.sw}m를 다 받치지 못합니다(한쪽 약 ${r1(lack)}m 모자람). 칸 수를 늘리세요.`);
+        if(q.Hh<Ld.top-.05)note('warn',`${fn}: 높이 ${q.Hh}m가 LED 맨 위 ${Ld.top}m보다 낮습니다. 단 수를 늘리세요.`);
+        note('info',`${fn}: LED를 거는 방식(행잉 바·브라켓)과 맨 위 수평재의 허용 하중, 대각 가새를 확인하세요.`)}
+      return}
+    if(r.kind==='tbar'){if(kg>30)note('stop',`${nm}: 스탠드 한 대에 조명 약 ${kg}kg은 무겁습니다. 조명을 나누거나 트러스로 옮기세요.`);else note(H>3.5||kg>15?'warn':'ok',`${nm}: 높이 ${H}m에 조명 약 ${kg}kg. 다리에 모래주머니를 올리고, 객석 동선에서 떨어뜨려 세우세요.`);return}
+    if(r.kind==='truss'){const al=(T290.find(x=>L<=x[0])||[0,0])[1];
+      if(L>12)note('stop',`${nm}: 길이 ${L}m는 290각 한 스팬으로 무리입니다. 가운데 지지점을 추가하거나 400각 이상(빅트러스)으로 바꿔야 합니다.`);
+      else if(kg>al)note('stop',`${nm}: 걸린 조명 약 ${kg}kg이 ${L}m 스팬의 참고 한도(약 ${al}kg)를 넘습니다. 조명을 나누거나, 지지점을 늘리거나, 400각 이상(빅트러스)을 검토하세요.`);
+      else if(kg>al*.6||L>8)note('warn',`${nm}: ${L}m 스팬에 약 ${kg}kg (참고 한도 약 ${al}kg). 한도에 가깝거나 스팬이 깁니다 — 제조사 하중표와 처짐을 확인하세요.`);
+      else note('ok',`${nm}: ${L}m 스팬에 약 ${kg}kg — 참고 한도(약 ${al}kg) 안쪽입니다.`);
+      note('warn',`${nm}: 천장에 매다는 것으로 그렸습니다. 리깅 포인트 ${Math.max(2,Math.ceil(L/6)+1)}곳과 포인트당 허용 하중(트러스 자중 약 ${Math.round(L*6)}kg + 조명 ${kg}kg + 호이스트 무게)을 행사장에 확인하세요. 리깅이 안 되는 곳이면 타워 리프트(그라운드 서포트) 2대 이상으로 세워야 합니다.`)}
+    else if(r.kind==='batten'){if(L>6||kg>60)note('stop',`${nm}: 파이프 한 줄에 ${L}m · 약 ${kg}kg은 무리입니다. 매다는 점을 2~3m마다 두거나 트러스로 바꾸세요.`);else note(kg>30?'warn':'ok',`${nm}: ${L}m에 약 ${kg}kg. 매다는 점을 2~3m마다 두고, 원래 있는 바턴이면 행사장에 허용 하중을 확인하세요.`)}
+    else{const ra=H/1.09;if(ra>4)note('stop',`${nm}: 높이 ${H}m ÷ 밑변 1.09m = ${r1(ra)}:1 — 아웃리거·무게추나 벽 고정 없이는 넘어질 위험이 큽니다.`);else if(ra>3)note('warn',`${nm}: 높이 대 밑변 ${r1(ra)}:1 — 아웃리거나 무게추로 넘어짐을 막으세요.`);else note('ok',`${nm}: 높이 ${H}m, 밑변 대비 ${r1(ra)}:1.`);if(kg)note('info',`${nm}: 한쪽에 조명 약 ${kg}kg이 걸립니다 — 반대쪽 무게추를 고려하세요.`)}
+    if(r.kind!=='layher'&&H>h-.3)note('stop',`${nm}: 높이 ${H}m가 천장(${h}m)에 닿습니다.`);
+    if(r.kind!=='layher'&&H<2.3)note('warn',`${nm}: 높이 ${H}m는 사람 머리에 닿을 수 있습니다.`)});
+  // LED·무대
+  if(sw>0&&scrH>0){const top=r1((a.h||0)+scrH);if(cab)note('info',`LED 캐비닛 ${cabN}장 약 <b>${Math.round(cabN*(SK==='c55'?7.5:12))}kg</b> (500×500 7.5kg, 500×1000 12kg 기준) — 바닥과 무대 허용 하중을 확인하세요.`);
+    if(cab&&!S.rigs.some(r=>r.kind==='frame')&&scrH>2)note('stop',`LED 벽 높이 ${scrH}m는 뒤 구조물 없이 세울 수 없습니다. LED 칸의 「LED 뒤에 구조물 세우기」로 레이어·아시바를 받치거나 트러스에 매달아야 합니다.`);
+    if(sup){const Hh=lifts*sup.lift,ra=Hh/sup.dep;note(ra>3?'warn':'ok',`LED 뒤 ${sup.n}: 높이 ${r1(Hh)}m ÷ 깊이 ${sup.dep}m = ${r1(ra)}:1`+(ra>3?' — 무게추나 아웃리거로 넘어짐을 막아야 합니다.':'.'));note('info','LED를 구조물에 거는 방식(행잉 바·브라켓)과 맨 위 수평재의 허용 하중을 확인하세요.')}
+    if(top>h)note('stop',`LED 맨 위 ${top}m가 천장(${h}m)보다 높습니다.`)}
+  if(topH>=.6)note('warn',`무대 높이 ${Math.round(topH*1000)}mm — 계단이 필요하고, 뒤·옆 가장자리에 추락 방지(난간이나 막음)를 두세요.`);else if(topH>=.4)note('info',`무대 높이 ${Math.round(topH*1000)}mm — 오르내릴 계단을 두세요.`);
+  {const IC={ok:['✓','#D4F53C'],info:['·','#9fd0ff'],warn:['!','#ffb347'],stop:['✕','#ff6b6b']},ord={stop:0,warn:1,info:2,ok:3},e=$('#safety');
+    if(e)e.innerHTML=notes.length?notes.sort((x,y)=>ord[x[0]]-ord[y[0]]).map(([lv,t])=>`<div style="display:flex;gap:8px;margin-bottom:6px"><b style="color:${IC[lv][1]};flex:none;width:12px">${IC[lv][0]}</b><span>${t}</span></div>`).join(''):'점검할 구조물·전기·동선이 아직 없습니다.';
+    const nb=notes.filter(n=>n[0]==='stop').length,nw=notes.filter(n=>n[0]==='warn').length,ch=$('#warnchip');if(ch){ch.style.display=nb||nw?'block':'none';ch.textContent=(nb?`✕ 꼭 고칠 것 ${nb}`:'')+(nb&&nw?' · ':'')+(nw?`! 확인할 것 ${nw}`:'');ch.style.background=nb?'#ff6b6b':'#ffb347'}}
   $('#tally').innerHTML=tl.join('<br>');
   // 카메라
   S.cams.forEach((c,i)=>{tagTo('cam:'+i);
     const pos=camPos(c),aim=camAim(c),g=new THREE.Group();g.position.copy(pos);g.lookAt(aim);helpers.add(g);
-    box(.28,.24,.5,mat.dark,0,0,0,g);const ln=new THREE.Mesh(new THREE.CylinderGeometry(.09,.11,.3,16),mat.dark);ln.rotation.x=Math.PI/2;ln.position.z=.38;g.add(ln);
-    const base=camBase(c);box(.05,c.h,.05,mat.dark,c.x,base+c.h/2,frontZ+c.dist,helpers);
+    {const bx=c.lens==='xa55',st=(c.body||'').startsWith('st4k'),cm=M(0x17181c,{roughness:.5,metalness:.3}),gl=new THREE.MeshBasicMaterial({color:new THREE.Color(camCol(c,i)),toneMapped:false});
+      if(st){box(.42,.28,.1,cm,0,.02,-.02,g);box(.4,.25,.01,gl,0,.02,-.075,g,false)}else{box(.16,.2,.36,cm,0,0,-.05,g);box(.05,.06,.26,cm,0,.14,-.03,g,false);box(.12,.09,.05,cm,-.02,.15,-.2,g,false)}   // 스튜디오(큰 화면) / 숄더형 본체·손잡이·뷰파인더
+      if(bx){box(.26,.26,.6,cm,0,.02,.45,g);box(.3,.3,.14,cm,0,.02,.8,g)}else{const ln=new THREE.Mesh(new THREE.CylinderGeometry(st?.035:.05,st?.04:.06,st?.12:.26,16),cm);ln.rotation.x=Math.PI/2;ln.position.z=st?.1:.26;ln.castShadow=true;g.add(ln)}
+      const fr=new THREE.Mesh(new THREE.CircleGeometry(bx?.11:st?.03:.045,16),gl);fr.position.z=bx?.875:st?.165:.395;g.add(fr)}
+    const base=camBase(c),RH=(+c.riser||0)/1000,cz=frontZ+c.dist,hd=Math.max(.3,c.h-.16);
+    {const strut=(p,q,th)=>{const dv=q.clone().sub(p),m=new THREE.Mesh(new THREE.CylinderGeometry(th,th,dv.length(),8),mat.dark);m.position.copy(p).add(q).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dv.normalize());m.castShadow=true;helpers.add(m)};
+      const top=new THREE.Vector3(c.x,base+hd,cz),sp=Math.min(.5,.28+hd*.14);for(let k=0;k<3;k++){const an=k*Math.PI*2/3+Math.PI/6;strut(top,new THREE.Vector3(c.x+Math.cos(an)*sp,base,cz+Math.sin(an)*sp),.018)}
+      box(.1,.1,.1,mat.dark,c.x,base+hd+.04,cz,helpers);hitBox(helpers,sp*2,c.h,sp*2,c.x,base+c.h/2,cz)}
+    if(RH||+c.op){const a0=camAim0(c),rg=new THREE.Group();rg.position.set(c.x,base-RH,frontZ+c.dist);rg.rotation.y=Math.atan2(a0.x-c.x,a0.z-(frontZ+c.dist));dyn.add(rg);   // +z 가 무대 쪽, 뒤 데크는 -z
+      const RT=c.rtype||'split',DW=RT==='s15'?1.5:1.8,oz=RT==='split'?-1:-(DW-.9),decks=RT==='split'?[[1.8,.9,0],[1.8,.9,-1]]:[[DW,DW,.45-DW/2]];
+      if(RH){for(const [dw,dd,zc] of decks){box(dw,.05,dd,mat.deck,0,RH-.025,zc,rg);box(dw-.01,.06,dd-.01,mat.frame,0,RH-.08,zc,rg);for(const ax of[-1,1])for(const az of[-1,1])box(.04,Math.max(.02,RH-.11),.04,mat.frame,ax*(dw/2-.06),(RH-.11)/2,zc+az*(dd/2-.06),rg)}
+        if(+c.stairs){const n=Math.max(2,Math.ceil(RH/.2)),rise=RH/n;for(let k=0;k<n-1;k++)box(.28,RH-rise*(k+1),.9,mat.deck,DW/2+.14+.28*k,(RH-rise*(k+1))/2,oz,rg)}
+        hitBox(rg,DW,RH,RT==='split'?1.9:DW,0,RH/2,RT==='split'?-.5:.45-DW/2)}
+      if(+c.op===1){const sg=new THREE.Group();sg.position.set(0,RH,oz-.05);sg.rotation.y=Math.PI;rg.add(sg);chair(sg,0,0,0,.46,.46,.9,chairMat('접이식'));personSit(0,RH,oz,mat.dark,rg)}
+      if(+c.op===2)person(0,RH,RH?-.75:-.7,mat.dark,rg)}
     const D=pos.distanceTo(aim),dist=D+1,hw=Math.tan(camFov(c)*Math.PI/360)*dist,hh=hw*9/16;
     {const [lo,hi,l]=lensR(c),SH=camSH(c),SW=camSW(c),bd=BODIES[c.body]||BODIES.g2_4k,f=camF(c),H=D*SH/f,fb=D*SH/.7,el=$('#ci'+i);
       if(el)el.innerHTML=(camTurn(c)?`<span style="color:#9fd0ff">발표자 방향에서 ${camTurn(c)} 돌림</span><br>`:'')+(base?`<span style="color:var(--lime)">객석 단 위 (바닥에서 +${r1(base)}m)</span><br>`:'')+`발표자까지 <b>${r1(D)}m</b> · 지금 <b>${Math.round(f)}mm</b><br>화면에 세로 ${r1(H)}m가 담김 → <b>${shotName(H)}</b><br>가장 넓게(${r1(lo)}mm): 가로 ${r1(D*SW/lo)}m가 담김<br>가장 당기면(${Math.round(hi)}mm): ${shotName(D*SH/hi)}<br>`+
@@ -697,17 +1078,18 @@ function build(){
     label(c.name,c.x,base+c.h+.7,frontZ+c.dist,.45,camCol(c,i));
   });
   tagTo('');
-  if(!VIEW)try{localStorage.setItem('stage3d-current',JSON.stringify({name:sceneName,s:serialize()}))}catch(e){}
+  if(!VIEW){clearTimeout(build._ls);build._ls=setTimeout(()=>{try{localStorage.setItem('stage3d-current',JSON.stringify({name:sceneName,s:serialize()}))}catch(e){}},400)}   // 그림이 들어가면 커서 잠깐 모아서 저장
   applyView();
 }
 function applyView(){
-  const {w,d,h}=S.venue,inside=view==='seat'||view.startsWith('cam');
-  roof.visible=inside;helpers.visible=!inside&&view!=='stage';controls.enabled=!inside;
+  const {w,d,h}=S.venue,inside=view==='seat'||view.startsWith('cam'),mv=view==='media';
+  roof.visible=inside||mv;helpers.visible=!inside&&view!=='stage'&&!mv;controls.enabled=!inside;controls.maxPolarAngle=mv?Math.PI*.92:Math.PI/2-0.02;   // 미디어월은 올려다봐야 해서 아래에서 보는 각도 허용
   const asp=el.clientWidth/el.clientHeight;
   const hfov=deg=>camera.fov=2*Math.atan(Math.tan(deg*Math.PI/360)/asp)*180/Math.PI;
   if(view==='3d'){camera.fov=45;camera.position.set(w*.9,h*1.5,d*.75);controls.target.set(0,1,-d*.15)}
   else if(view==='stage'){camera.fov=40;camera.position.set(5.5,3.2,G.frontZ+6);controls.target.set(0,1,G.stageMidZ)}
   else if(view==='top'){camera.fov=45;camera.position.set(0,Math.max(d,w/asp)*1.25,.01);controls.target.set(0,0,0)}
+  else if(mv){if(!mediaView(asp)){view='3d';return applyView()}}
   else if(view==='seat'){hfov(70);camera.position.set(0,1.5,Math.min(d/2-1,G.frontZ+8));controls.target.copy(G.aim)}
   else{const c=S.cams[+view.slice(3)];if(!c){view='3d';return applyView()}const fv=camFov(c);$('#frame').style.borderColor=camCol(c,+view.slice(3));if(asp>16/9)camera.fov=2*Math.atan(Math.tan(fv*Math.PI/360)/(16/9))*180/Math.PI;else hfov(fv);camera.position.copy(camPos(c));controls.target.copy(camAim(c));
     {const D=camPos(c).distanceTo(camAim(c));$('#framecap').textContent=`${c.name} · ${(BODIES[c.body]||BODIES.g2_4k).n} · ${lensR(c)[2].n}${c.ext?' ×2':''} · ${Math.round(camF(c))}mm · 거리 ${r1(D)}m · ${shotName(D*camSH(c)/camF(c))}`}}
@@ -719,9 +1101,9 @@ addEventListener('resize',resize);
 // 마우스: 살짝 누르면 고르기, 카메라 화면에서 끌면 방향 돌리기, 휠은 줌
 {const cv=renderer.domElement;let dn=null;
   cv.addEventListener('pointerdown',e=>{dn={x:e.clientX,y:e.clientY,moved:false};if(VIEW)return;if(view.startsWith('cam'))return cv.setPointerCapture(e.pointerId);
-    if(view==='seat'||armed)return;const t=pickAt(e.clientX,e.clientY);if(/^(cam|item|light|rig):/.test(t)){dn.drag=t;dn.py=tagY(t);controls.enabled=false;cv.setPointerCapture(e.pointerId)}});
+    if(view==='seat'||armed)return;const t=pickAt(e.clientX,e.clientY);if(MOVABLE.test(t)){dn.drag=t;dn.py=tagY(t);const h0=floorHit(e.clientX,e.clientY,dn.py),p0=tagXZ(t);dn.off=h0&&p0?{x:p0[0]-h0.x,z:p0[1]-h0.z}:{x:0,z:0};controls.enabled=false;cv.setPointerCapture(e.pointerId)}});
   cv.addEventListener('pointermove',e=>{if(!dn)return;const dx=e.clientX-dn.x,dy=e.clientY-dn.y;if(Math.abs(dx)+Math.abs(dy)>4)dn.moved=true;
-    if(dn.drag){if(!dn.moved)return;const hp=floorHit(e.clientX,e.clientY,dn.py);if(hp){moveTag(dn.drag,hp);dn.dragged=true;if(!cv._raf)cv._raf=requestAnimationFrame(()=>{cv._raf=0;build()})}return}
+    if(dn.drag){if(!dn.moved)return;const hp=floorHit(e.clientX,e.clientY,dn.py);if(hp){moveTag(dn.drag,{x:hp.x+dn.off.x,z:hp.z+dn.off.z});dn.dragged=true;if(!cv._raf)cv._raf=requestAnimationFrame(()=>{cv._raf=0;build()})}return}
     if(!dn.moved||VIEW||!view.startsWith('cam'))return;const i=+view.slice(3),c=S.cams[i];if(!c)return;
     const perPx=camFov(c)/$('#frame').clientWidth;c.pan=Math.round(((+c.pan||0)-dx*perPx)*10)/10;c.tilt=Math.round(((+c.tilt||0)+dy*perPx)*10)/10;dn.x=e.clientX;dn.y=e.clientY;dn.turned=true;
     const a=document.querySelector(`[data-p="cams.${i}.pan"]`),b=document.querySelector(`[data-p="cams.${i}.tilt"]`);if(a)a.value=c.pan;if(b)b.value=c.tilt;applyView()});
@@ -734,24 +1116,31 @@ addEventListener('resize',resize);
     document.querySelectorAll(`[data-shot^="${i},"]`).forEach(b=>b.classList.remove('on'));applyView();clearTimeout(cv._wt);cv._wt=setTimeout(build,250)},{passive:false});}
 (async()=>{
   if(VIEW){document.body.classList.add('viewer');scenes=null;
-    try{const o=location.hash.startsWith('#s=')?await openSealed(location.hash.slice(3)):await unpackScene(location.hash.slice(3));restore(o.s);sceneName=o.n||''}catch(e){document.body.insertAdjacentHTML('beforeend',`<div id="sharebox"><div class="in" style="max-width:480px"><h1>링크를 열지 못했습니다</h1><div class="sub">${e===404?'방금 만든 링크라면 1분쯤 뒤에 다시 열어 주세요.':'주소가 중간에 잘렸을 수 있습니다. 보낸 분에게 링크를 다시 받아 주세요.'}</div></div></div>`)}
-    $('#vtitle').innerHTML=`<b>${esc(sceneName||S.venue.name||'행사장 시안')}</b>${whenTxt()?`<br><span style="color:var(--lime)">${esc(whenTxt())}</span>`:''}${S.venue.name&&sceneName?`<br><span style="color:var(--dim)">${esc(S.venue.name)}</span>`:''}<br><span style="color:var(--dim)">위 버튼으로 카메라별 화면을 볼 수 있습니다 · 끌어서 돌려 보기</span>`;
+    try{const o=location.hash.startsWith('#s=')?await openSealed(HPAY):await unpackScene(HPAY);restore(o.s);sceneName=o.n||'';if(HOPT.get('view')==='media'&&S.media.surfaces.length)view='media'}catch(e){document.body.insertAdjacentHTML('beforeend',`<div id="sharebox"><div class="in" style="max-width:480px"><h1>링크를 열지 못했습니다</h1><div class="sub">${e===404?'방금 만든 링크라면 1분쯤 뒤에 다시 열어 주세요.':'주소가 중간에 잘렸을 수 있습니다. 보낸 분에게 링크를 다시 받아 주세요.'}</div></div></div>`)}
+    $('#vtitle').innerHTML=`<b>${esc(sceneName||S.venue.name||'행사장 시안')}</b>${whenTxt()?`<br><span style="color:var(--lime)">${esc(whenTxt())}</span>`:''}${S.venue.name&&sceneName?`<br><span style="color:var(--dim)">${esc(S.venue.name)}</span>`:''}<br><span style="color:var(--dim)">위 버튼으로 카메라별 화면을 볼 수 있습니다 · 끌어서 돌려 보기</span>${S.media.surfaces.length?'<br><span style="color:#ff5fa2">「미디어월」 버튼: 천장·벽면 미디어를 정면에서 보기</span>':''}${S.media.surfaces.some(s=>s.src==='video'&&s.vimg)?'<br><span style="color:#ffb347">영상 면은 첫 장면 사진으로 보입니다</span>':''}`;
     panel();build();resize();return}
   if(window.PLACE_PUBLIC){   // 인터넷에 올린 묶음: 공유 링크 없이 열면 편집 화면 대신 안내만
     document.body.classList.add('viewer');$('#vtitle').style.display='none';
     document.body.insertAdjacentHTML('beforeend','<div id="sharebox"><div class="in" style="max-width:480px;margin-top:18vh"><h1><span style="color:var(--lime)">W</span> PLACE</h1><div class="sub">행사장 3D 시안을 보는 페이지입니다. 받으신 공유 링크로 열어 주세요.</div></div></div>');return}
   try{const c=JSON.parse(localStorage.getItem('stage3d-current')||'null');if(c&&c.s){restore(c.s);sceneName=c.name||''}}catch(e){}
+  renderPalette();if(innerWidth>1000)$('#palette').classList.add('open');loadMe();
   panel();build();resize();refreshScenes();loadVenues();
 })();
 addEventListener('hashchange',()=>location.reload());
+// 고른 물체를 방향키로 조금씩: 기본 10cm, Shift 50cm, Alt(⌥) 1cm. 위쪽 키 = 무대 쪽
+addEventListener('keydown',e=>{if(VIEW||!selTag||!MOVABLE.test(selTag))return;const tg=e.target;if(tg&&/INPUT|SELECT|TEXTAREA/.test(tg.tagName))return;
+  const st=e.shiftKey?.5:e.altKey?.01:.1,dv={ArrowLeft:[-st,0],ArrowRight:[st,0],ArrowUp:[0,-st],ArrowDown:[0,st]}[e.key];if(!dv)return;e.preventDefault();
+  const p0=tagXZ(selTag);if(!p0)return;const keep=selTag,was=selTag.startsWith('rig:')?S.rigs[+selTag.slice(4)].z:null;moveTag(selTag,{x:p0[0]+dv[0],z:p0[1]+dv[1]},r2);
+  if(selTag.startsWith('rig:')){const r=S.rigs[+selTag.slice(4)];if(r.kind==='frame'&&r.stuck&&dv[1]&&r.z===was){r.z=r2(was+(dv[1]>0?frDim(r).D+.7:-.9));stickFrame(r)}}   // 붙어 있는 구조물은 같은 방향으로 계속 누르면 떼어진다
+  if(selTag.startsWith('light:'))snapLight(S.lights[+selTag.slice(6)]);panel();build();const el2=document.querySelector(`[data-sec="${keep}"]`);if(el2)el2.classList.add('pick')});
 // 조명·구조물 목록에서 끌어다 놓기 (한 번 누르면 '놓을 준비', 그다음 화면을 누르면 놓임)
 {let nd=null;
-  document.addEventListener('pointerdown',e=>{const it=e.target.closest&&e.target.closest('.pi');if(!it)return;e.preventDefault();nd={spec:it.dataset.new,el:it,x:e.clientX,y:e.clientY,ghost:null}});
+  document.addEventListener('pointerdown',e=>{const it=e.target.closest&&e.target.closest('.pi');if(!it||!it.dataset.new)return;e.preventDefault();nd={spec:it.dataset.new,el:it,x:e.clientX,y:e.clientY,ghost:null}});
   document.addEventListener('pointermove',e=>{if(!nd)return;if(!nd.ghost&&Math.abs(e.clientX-nd.x)+Math.abs(e.clientY-nd.y)>5){nd.ghost=document.createElement('div');nd.ghost.id='ghost';nd.ghost.textContent=nd.el.textContent+' 놓기';document.body.appendChild(nd.ghost)}
     if(nd.ghost){nd.ghost.style.left=e.clientX+'px';nd.ghost.style.top=e.clientY+'px'}});
   document.addEventListener('pointerup',e=>{const d=nd;nd=null;if(!d)return;if(d.ghost){d.ghost.remove();const hp=floorHit(e.clientX,e.clientY);if(hp&&!view.startsWith('cam')&&view!=='seat')addNew(d.spec,hp);return}
     document.querySelectorAll('.pi.armed').forEach(x=>x.classList.remove('armed'));if(armed===d.spec){armed='';return}armed=d.spec;d.el.classList.add('armed')});}
-(function loop(){requestAnimationFrame(loop);if(controls.enabled)controls.update();renderer.render(scene,camera)})();
+(function loop(){requestAnimationFrame(loop);if(controls.enabled)controls.update();mediaTick();renderer.render(scene,camera)})();
 </script>
 <div id="brand"><b><i>W</i> PLACE</b><span>W플레이스는 우리미디어의 전용 플랫폼입니다.</span></div>
 <style>
