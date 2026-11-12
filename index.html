@@ -91,7 +91,7 @@ const S = {
   venue:{w:20,d:11,h:5},
   unit:'1.2x1.2',
   tiers:[{name:'뒷줄',cols:4,rows:1,h:60},{name:'앞줄',cols:4,rows:2,h:20}],
-  screen:{n:4,h:2.56,cw:0,kind:'fold',sup:'none',off:1,text:'행사 타이틀'},
+  screen:{n:4,h:2.56,cw:0,kind:'fold',sup:'none',off:1,orient:'v',lift:0,text:'행사 타이틀'},
   presenter:{mode:'stand',dist:2},
   people:[{role:'발표자',mode:'stand',x:0,tw:1800}],
   when:{date:'',note:''},
@@ -133,7 +133,7 @@ const RISERS=[0,600,800,1000,1200,1500];
 // LED 뒤에 세우는 구조물: 칸 길이·폭·단 높이를 규격에서 고른다 (m)
 const FR={layher:{n:'레이어(레이허)',bay:[0.73,1.09,1.57,2.07,2.57,3.07],dep:[0.73,1.09,1.57,2.07],lift:[1,1.5,2],d:[2.07,1.09,2]},
   asiba:{n:'아시바(강관 비계)',bay:[1.219,1.524,1.829],dep:[0.914,1.219],lift:[1.7],d:[1.829,1.219,1.7]}};
-const frDim=r=>{const W=r2((+r.bays||1)*(+r.bay||2.07)),Hh=r2((+r.lifts||1)*(+r.lift||2)),D=+r.dep||1.09;return {W,Hh,D}};
+const frDim=r=>{const W=r2((+r.bays||1)*(+r.bay||2.07)),Hh=r2((+r.lifts||1)*(+r.lift||2)),nd=Math.max(1,Math.min(4,Math.round(+r.deps||1))),D=r2(nd*(+r.dep||1.09));return {W,Hh,D,nd}};
 function newFrame(sys,x,z){const f=FR[sys]||FR.layher,L=G.led||{sw:6,top:3};return {kind:'frame',sys:FR[sys]?sys:'layher',x,z,rot:0,bay:f.d[0],dep:f.d[1],lift:f.d[2],bays:Math.max(1,Math.ceil((L.sw||6)/f.d[0])),lifts:Math.max(1,Math.ceil((L.top||3)/f.d[2]))}}
 const LINES={power:{n:'전원 간선',c:'#ff7a3d'},signal:{n:'신호·영상 라인',c:'#4fc3ff'},path:{n:'입장 동선',c:'#5ff0c0'}};
 const COVERS=[['none','마감 없음'],['mat','고무판'],['jacket','옐로우 자켓']];
@@ -265,8 +265,10 @@ ${(L.features||[]).length?`<br><span style="color:var(--dim)">사진에서 읽�
   <div class="row two"><label>종류<select data-p="screen.kind" data-str>${[['fold','폴딩 LED (1대 1,280mm)'],['c55','캐비닛 500 × 500'],['c510','캐비닛 500 × 1000']].map(o=>`<option value="${o[0]}" ${(S.screen.kind||'fold')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>
   ${num('screen.off','뒤 벽에서 m')}</div>
   <button class="wide" id="addframe" style="margin-bottom:6px">LED 뒤에 구조물 세우기 (레이어·아시바)</button>
-  <div class="row">${num('screen.n','폴딩 대 수',1)}${num('screen.cw','가로 m',0.5)}${num('screen.h','높이 m',0.5)}</div>
-  <div class="sub" style="margin:0 0 6px">폴딩은 대 수로(가로 m를 넣으면 그 크기 벽으로), 캐비닛은 가로·높이 m를 넣으면 장 수에 맞게 맞춰집니다.</div>
+  ${S.screen.kind==='c510'?`<label style="margin-bottom:6px">캐비닛 방향<select data-p="screen.orient" data-str><option value="v" ${S.screen.orient!=='h'?'selected':''}>세로로 세움 (가로 500 × 세로 1000)</option><option value="h" ${S.screen.orient==='h'?'selected':''}>가로로 눕힘 (가로 1000 × 세로 500)</option></select></label>`:''}
+  <div class="row">${S.screen.kind==='fold'?num('screen.n','폴딩 대 수',1):'<label>캐비닛 장 수<input disabled id="cabn"></label>'}${num('screen.cw','LED 가로 m',0.5)}${num('screen.h','LED 세로(높이) m',0.5)}</div>
+  <div class="row two">${num('screen.lift','바닥에서 띄우는 높이 m',0.1)}<label>LED 맨 아래 · 맨 위<input disabled id="ledtop"></label></div>
+  <div class="sub" style="margin:0 0 6px">가로·세로는 LED 화면 자체 크기, 「띄우는 높이」는 LED가 서는 바닥(무대가 있으면 무대 윗면)에서 LED 아랫변까지입니다. 폴딩은 대 수로, 캐비닛은 가로·세로 m를 넣으면 장 수에 맞게 맞춰집니다.</div>
   <label>화면에 띄울 글자<input data-p="screen.text" data-str value="${esc(S.screen.text||'')}"></label>
   <div class="note" id="ledn"></div>
   <h2 data-sec="presenter">발표자 · 사회자</h2>
@@ -305,9 +307,10 @@ ${(L.features||[]).length?`<br><span style="color:var(--dim)">사진에서 읽�
   ${r.kind==='frame'?(()=>{const f=FR[r.sys]||FR.layher,o=(k,arr,u)=>`<select data-p="rigs.${i}.${k}">${arr.map(v=>`<option value="${v}" ${+r[k]===v?'selected':''}>${v}${u}</option>`).join('')}</select>`,q=frDim(r),nb=+r.bays||1,nl=+r.lifts||1;
     return `<label>종류<select data-p="rigs.${i}.sys" data-str>${Object.entries(FR).map(([k,v])=>`<option value="${k}" ${r.sys===k?'selected':''}>${v.n}</option>`).join('')}</select></label>
   <div class="row" style="margin-top:6px">${num(`rigs.${i}.x`,'좌우 m')}${num(`rigs.${i}.z`,'무대에서 m')}${num(`rigs.${i}.rot`,'회전 °',15)}</div>
-  <div class="row">${num(`rigs.${i}.bays`,'가로 칸 수',1)}<label>칸 길이${o('bay',f.bay,'m')}</label><label>폭(깊이)${o('dep',f.dep,'m')}</label></div>
+  <div class="row two">${num(`rigs.${i}.bays`,'가로 칸 수',1)}<label>칸 길이${o('bay',f.bay,'m')}</label></div>
+  <div class="row two"><label>폭 수 (앞뒤 몇 줄)<select data-p="rigs.${i}.deps">${[1,2,3].map(v=>`<option value="${v}" ${(q.nd)===v?'selected':''}>${v}폭</option>`).join('')}</select></label><label>한 폭 길이${o('dep',f.dep,'m')}</label></div>
   <div class="row two">${num(`rigs.${i}.lifts`,'단 수',1)}<label>단 높이${o('lift',f.lift,'m')}</label></div>
-  <div class="note" style="margin:0">전체 <b>가로 ${q.W}m × 폭 ${q.D}m × 높이 ${q.Hh}m</b><br>수직재(${r.lift}m) ${(nb+1)*2*nl}개 · 가로 수평재(${r.bay}m) ${nb*2*(nl+1)}개 · 폭 수평재(${r.dep}m) ${(nb+1)*(nl+1)}개<br><span style="color:var(--dim)">대각 가새·발판·베이스는 따로 계산</span></div>`})()
+  <div class="note" style="margin:0"><b>${q.nd}폭 ${nl}단</b> · 전체 <b>가로 ${q.W}m × 폭 ${q.D}m × 높이 ${q.Hh}m</b><br>수직재(${r.lift}m) ${(nb+1)*(q.nd+1)*nl}개 · 가로 수평재(${r.bay}m) ${nb*(q.nd+1)*(nl+1)}개 · 폭 수평재(${r.dep}m) ${(nb+1)*q.nd*(nl+1)}개<br><span style="color:var(--dim)">대각 가새·발판·베이스는 따로 계산</span></div>`})()
   :`<div class="row">${num(`rigs.${i}.x`,'좌우 m')}${num(`rigs.${i}.z`,'무대에서 m')}${num(`rigs.${i}.h`,'높이 m')}</div>
   ${r.kind==='layher'?'':`<div class="row two">${num(`rigs.${i}.len`,'길이 m')}${num(`rigs.${i}.rot`,'회전 °',15)}</div>`}`}</div>`).join('')}
   ${S.lights.map((l,i)=>`<div class="cam" data-sec="light:${i}" style="border-left:3px solid ${l.color||'#fff'}"><div class="top"><b>${LIGHTS[l.type].n} ${i+1}</b><button class="x" data-dellight="${i}">빼기</button></div>
@@ -363,13 +366,13 @@ document.addEventListener('input',e=>{
   const p=e.target.dataset.p; if(!p)return;
   const v=e.target.dataset.str!==undefined?e.target.value:parseFloat(e.target.value);
   if(typeof v==='number'&&isNaN(v))return;
-  set(p,v); if(/^people\.\d+\.(mode|role)$/.test(p))panel(); if(/^rigs\.\d+\.sys$/.test(p)){const r=S.rigs[+p.split('.')[1]],f=FR[r.sys];Object.assign(r,{bay:f.d[0],dep:f.d[1],lift:f.d[2]});panel()}else if(/^rigs\.\d+\.(bays|bay|dep|lifts|lift)$/.test(p)&&e.target.tagName==='SELECT')panel(); if(/^lights\.\d+\.(x|z)$/.test(p)){snapLight(S.lights[+p.split('.')[1]]);panel()} if(/^cams\.\d+\.(lens|ext|body)$/.test(p)){const c=S.cams[+p.split('.')[1]],isM=!!(LENSES[c.lens]||{}).mft;
+  set(p,v); if(p==='screen.kind'||p==='screen.orient')panel(); if(/^people\.\d+\.(mode|role)$/.test(p))panel(); if(/^rigs\.\d+\.sys$/.test(p)){const r=S.rigs[+p.split('.')[1]],f=FR[r.sys];Object.assign(r,{bay:f.d[0],dep:f.d[1],lift:f.d[2]});panel()}else if(/^rigs\.\d+\.(bays|bay|dep|deps|lifts|lift)$/.test(p)&&e.target.tagName==='SELECT')panel(); if(/^lights\.\d+\.(x|z)$/.test(p)){snapLight(S.lights[+p.split('.')[1]]);panel()} if(/^cams\.\d+\.(lens|ext|body)$/.test(p)){const c=S.cams[+p.split('.')[1]],isM=!!(LENSES[c.lens]||{}).mft;
     if(p.endsWith('.lens')){if(isM)c.body='st4k_mft';else if(c.body==='st4k_mft')c.body='st4k'}   // MFT 렌즈는 스튜디오 카메라에만
     if(p.endsWith('.body')){if(c.body==='st4k_mft'&&!isM)c.lens='mft14';else if(c.body!=='st4k_mft'&&isM)c.lens='xa20'}
     c.f=camF(c);if(c.shot)setShot(c,c.shot);panel()} if(p==='seats.layout'){if(v==='round')Object.assign(S.seats,{rows:3,cols:4,perTable:10});else if(v==='class')Object.assign(S.seats,{rows:5,cols:4,perTable:3});else if(v==='tier')Object.assign(S.seats,{rows:9,cols:12});else Object.assign(S.seats,{rows:4,cols:12});panel()} build();
 });
 document.addEventListener('change',async e=>{
-  {const m=/^rigs\.(\d+)\.(x|z|rot|dep|bay|bays)$/.exec(e.target.dataset.p||'');if(m&&S.rigs[+m[1]]&&S.rigs[+m[1]].kind==='frame'){stickFrame(S.rigs[+m[1]]);panel();build()}}
+  {const m=/^rigs\.(\d+)\.(x|z|rot|dep|deps|bay|bays)$/.exec(e.target.dataset.p||'');if(m&&S.rigs[+m[1]]&&S.rigs[+m[1]].kind==='frame'){stickFrame(S.rigs[+m[1]]);panel();build()}}
   if(e.target.id==='pcat'){pickCat=e.target.value;panel()}
   if(e.target.id==='lookfile'&&e.target.files[0])lookFromPhoto([...e.target.files].slice(0,8));
   if(e.target.id==='loadscene'&&e.target.value)loadScene(e.target.value);
@@ -744,24 +747,26 @@ function build(){
   const floorY=(x,z)=>{for(const r of rects)if(Math.abs(x)<=r[0]&&z>=r[1]&&z<=r[2])return r[3];return 0};
   G={frontZ,topH,stageMidZ,ph,pz,sit,led:null,people:PP.map(q=>({x:+q.x||0,y:ph,z:pz,sit:q.mode==='table'})),aim:new THREE.Vector3(mainQ?+mainQ.x||0:0,ph+(sit?.95:1.3),pz)};G.mainP=G.people[PP.indexOf(mainQ)]||null;
   $('#count').innerHTML=`${S.tiers[0].name} <b>${a.n}장</b> (${a.w}m × ${a.d}m)<br>${S.tiers[1].name} <b>${b.n}장</b> (${b.w}m × ${b.d}m)<br>데크 모두 <b>${a.n+b.n}장</b> · 전체 깊이 ${r2(a.d+b.d)}m`;
-  const SK=S.screen.kind||'fold',cab=SK==='c55'||SK==='c510',UH=SK==='c510'?1:.5,cwid=cab?Math.max(.5,Math.round((+S.screen.cw||Math.round(S.screen.n)*LEDW)/.5)*.5):(+S.screen.cw>0?+S.screen.cw:0),UW=cwid?.5:LEDW,
-    scrH=cab?Math.max(UH,Math.round(S.screen.h/UH)*UH):+S.screen.h,sw=cwid?r2(cwid):r2(Math.max(0,Math.round(S.screen.n))*LEDW),gap=Math.round((a.w-sw)*500),cabN=cab?Math.round(sw/.5)*Math.round(scrH/UH):0,
-    bays=sup?Math.max(1,Math.ceil(sw/sup.bay)):0,lifts=sup?Math.max(1,Math.ceil(((a.h||0)+scrH)/sup.lift)):0;
-  $('#ledn').innerHTML=sw?`LED 전체 <b>가로 ${sw}m × 높이 ${scrH}m</b>${cab?`<br>캐비닛 ${SK==='c55'?'500×500':'500×1000'} <b>${cabN}장</b> (가로 ${Math.round(sw/.5)} × 세로 ${Math.round(scrH/UH)})`:cwid?' (LED 벽)':''}${sup&&sw?`<br>뒤 구조물: ${sup.n} <b>${bays}칸 × ${lifts}단</b> · 깊이 ${sup.dep}m`:''}<br>`+(a.n?(gap>=0?`무대가 LED보다 좌우 <b>${gap}mm씩 여유</b>`:`무대가 LED보다 좌우 <b>${-gap}mm씩 좁음</b>`):''):'LED 없음';
-  if(a.n)label(`${S.tiers[0].name} ${a.w}×${a.d}m · 높이 ${S.tiers[0].h*10}mm`,0,a.h+scrH+1.1,zBack+a.d/2);
+  const SK=S.screen.kind||'fold',cab=SK==='c55'||SK==='c510',hor=SK==='c510'&&S.screen.orient==='h',CW=hor?1:.5,UH=SK==='c510'&&!hor?1:.5,cwid=cab?Math.max(CW,Math.round((+S.screen.cw||Math.round(S.screen.n)*LEDW)/CW)*CW):(+S.screen.cw>0?+S.screen.cw:0),UW=cab?CW:cwid?.5:LEDW,lift=Math.max(0,+S.screen.lift||0),base0=(a.h||0)+lift,
+    scrH=cab?Math.max(UH,Math.round(S.screen.h/UH)*UH):+S.screen.h,sw=cwid?r2(cwid):r2(Math.max(0,Math.round(S.screen.n))*LEDW),gap=Math.round((a.w-sw)*500),cabN=cab?Math.round(sw/CW)*Math.round(scrH/UH):0,
+    bays=sup?Math.max(1,Math.ceil(sw/sup.bay)):0,lifts=sup?Math.max(1,Math.ceil((base0+scrH)/sup.lift)):0;
+  $('#ledn').innerHTML=sw?`LED 전체 <b>가로 ${sw}m × 높이 ${scrH}m</b>${cab?`<br>캐비닛 ${SK==='c55'?'500×500':hor?'1000×500 (가로로 눕힘)':'500×1000 (세로로 세움)'} <b>${cabN}장</b> (가로 ${Math.round(sw/CW)}장 × 세로 ${Math.round(scrH/UH)}장)`:cwid?' (LED 벽)':''}${sup&&sw?`<br>뒤 구조물: ${sup.n} <b>${bays}칸 × ${lifts}단</b> · 깊이 ${sup.dep}m`:''}${sw?`<br>LED 맨 아래 바닥에서 <b>${r2(base0)}m</b>${a.h?` (무대 ${Math.round(a.h*1000)}mm + 띄움 ${Math.round(lift*1000)}mm)`:''} · 맨 위 <b>${r2(base0+scrH)}m</b>`:''}<br>`+(a.n?(gap>=0?`무대가 LED보다 좌우 <b>${gap}mm씩 여유</b>`:`무대가 LED보다 좌우 <b>${-gap}mm씩 좁음</b>`):''):'LED 없음';
+  {const ct=$('#cabn');if(ct)ct.value=cab?`${cabN}장`:'';const lt=$('#ledtop');if(lt)lt.value=sw?`${r2(base0)}m · ${r2(base0+scrH)}m`:''}
+  if(a.n)label(`${S.tiers[0].name} ${a.w}×${a.d}m · 높이 ${S.tiers[0].h*10}mm`,0,base0+scrH+1.1,zBack+a.d/2);
   if(b.n)label(`${S.tiers[1].name} ${b.w}×${b.d}m · 높이 ${S.tiers[1].h*10}mm`,0,b.h+.45,frontZ+.5,.8);
   tagTo('led');
   // 뒤 화면
-  if(sw>0&&scrH>0){const sy=(a.h||0)+scrH/2,n=Math.max(1,Math.round(sw/UW));
+  if(sw>0&&scrH>0){const sy=base0+scrH/2,n=Math.max(1,Math.round(sw/UW));
+    if(lift>.02&&!S.rigs.some(r=>r.kind==='frame'))for(const ax of[-1,1])box(.1,lift,.4,mat.dark,ax*sw*.4,(a.h||0)+lift/2,zBack+a.d/2,dyn,false);   /* 뒤 구조물이 없으면 받침으로 띄움 */
     box(sw,scrH,.1,mat.dark,0,sy,zBack+a.d/2);
     for(let i=1;i<n;i++)box(.012,scrH,.01,mat.dark,-sw/2+UW*i,sy,zBack+a.d/2+.062,dyn,false);
-    if(cab)for(let j=1;j<Math.round(scrH/UH);j++)box(sw,.012,.01,mat.dark,0,(a.h||0)+UH*j,zBack+a.d/2+.062,dyn,false);
+    if(cab)for(let j=1;j<Math.round(scrH/UH);j++)box(sw,.012,.01,mat.dark,0,base0+UH*j,zBack+a.d/2+.062,dyn,false);
     if(sup){const mt=M(0x9aa0a8,{metalness:.6,roughness:.4}),W=bays*sup.bay,Hh=lifts*sup.lift,zf=zBack+a.d/2-.12,zb=zf-sup.dep;
       for(let i=0;i<=bays;i++){const x=-W/2+sup.bay*i;for(const z of[zf,zb])box(.048,Hh,.048,mt,x,Hh/2,z,dyn,false);for(let k=0;k<=lifts;k++)box(.04,.04,sup.dep,mt,x,Math.max(.1,sup.lift*k),(zf+zb)/2,dyn,false)}
       for(let k=0;k<=lifts;k++)for(const z of[zf,zb])box(W,.04,.04,mt,0,Math.max(.1,sup.lift*k),z,dyn,false)}
     const scr=new THREE.Mesh(new THREE.PlaneGeometry(sw,scrH-.02),new THREE.MeshBasicMaterial({map:ledTex(S.screen.text||'',scrH/sw),toneMapped:false}));scr.position.set(0,sy,zBack+a.d/2+.058);dyn.add(scr);
     const glow=new THREE.PointLight(0x8a7cff,.45,Math.max(10,sw*2.5));glow.position.set(0,sy,zBack+a.d/2+1.2);dyn.add(glow)}
-  G.led={sw:sw>0&&scrH>0?sw:0,top:r1((a.h||0)+scrH),z:zBack+a.d/2,h0:a.h||0};
+  G.led={sw:sw>0&&scrH>0?sw:0,top:r1(base0+scrH),bot:r2(base0),z:zBack+a.d/2,h0:a.h||0};
   if(S.screen.sup&&S.screen.sup!=='none'){const f=newFrame(S.screen.sup,0,0);f.z=r2(G.led.z-.1-f.dep/2-frontZ);f.stuck=1;S.rigs.push(f);S.screen.sup='none';queueMicrotask(panel)}   // 예전 방식(LED에 붙은 구조물)을 따로 놓는 구조물로 옮김
   tagTo('');
   // 무대 조명
@@ -824,9 +829,10 @@ function build(){
   const metal=M(0xb9bcc2,{metalness:.7,roughness:.35});
   S.rigs.forEach((r,i)=>{tagTo('rig:'+i);const g=new THREE.Group();g.position.set(r.x,0,frontZ+r.z);g.rotation.y=-(+r.rot||0)*Math.PI/180;dyn.add(g);const H=Math.max(.5,+r.h||4),Ln=Math.max(.5,+r.len||6);
     if(r.kind==='frame'){const q=frDim(r),nb=Math.max(1,+r.bays||1),nl=Math.max(1,+r.lifts||1),fm=M(r.sys==='asiba'?0x8a8f98:0xb9bcc2,{metalness:.65,roughness:.4});
-      for(let k=0;k<=nb;k++){const x=-q.W/2+r.bay*k;for(const az of[-1,1])box(.048,q.Hh,.048,fm,x,q.Hh/2,az*q.D/2,g);for(let j=0;j<=nl;j++)box(.04,.04,q.D,fm,x,Math.max(.12,r.lift*j),0,g,false)}
-      for(let j=0;j<=nl;j++)for(const az of[-1,1])box(q.W,.04,.04,fm,0,Math.max(.12,r.lift*j),az*q.D/2,g,false);
-      hitBox(g,q.W,q.Hh,q.D,0,q.Hh/2,0);label(`${FR[r.sys].n} ${i+1} · 가로 ${q.W} × 폭 ${q.D} × 높이 ${q.Hh}m`,r.x,q.Hh+.5,frontZ+r.z,.55);return}
+      const zs=[...Array(q.nd+1)].map((_,m)=>-q.D/2+m*q.D/q.nd);   /* 폭 수만큼 앞뒤 줄 */
+      for(let k=0;k<=nb;k++){const x=-q.W/2+r.bay*k;for(const zz of zs)box(.048,q.Hh,.048,fm,x,q.Hh/2,zz,g);for(let j=0;j<=nl;j++)box(.04,.04,q.D,fm,x,Math.max(.12,r.lift*j),0,g,false)}
+      for(let j=0;j<=nl;j++)for(const zz of zs)box(q.W,.04,.04,fm,0,Math.max(.12,r.lift*j),zz,g,false);
+      hitBox(g,q.W,q.Hh,q.D,0,q.Hh/2,0);label(`${FR[r.sys].n} ${i+1} · ${q.nd}폭 ${Math.max(1,+r.lifts||1)}단 · ${q.W}×${q.D}×${q.Hh}m`,r.x,q.Hh+.5,frontZ+r.z,.55);return}
     if(r.kind==='layher'){for(const ax of[-1,1])for(const az of[-1,1])box(.048,H,.048,metal,ax*.545,H/2,az*.545,g);for(let y=.2;y<=H+.01;y+=2)for(const k of[-1,1]){box(1.09,.04,.04,metal,0,Math.min(y,H),k*.545,g,false);box(.04,.04,1.09,metal,k*.545,Math.min(y,H),0,g,false)}}
     else if(r.kind==='truss'){for(const ay of[-1,1])for(const az of[-1,1])box(Ln,.05,.05,metal,0,H+ay*.12,az*.12,g);for(let x=-Ln/2;x<=Ln/2+.01;x+=.5)for(const az of[-1,1]){box(.025,.24,.025,metal,x,H,az*.12,g,false);box(.025,.025,.24,metal,x,H+az*.12,0,g,false)}}
     else if(r.kind==='tbar'){const pl=new THREE.Mesh(new THREE.CylinderGeometry(.022,.028,H,10),mat.dark);pl.position.y=H/2;pl.castShadow=true;g.add(pl);box(Ln,.04,.04,mat.dark,0,H,0,g);for(let k=0;k<3;k++){const lg=box(.9,.03,.03,mat.dark,0,.25,0,g,false);lg.rotation.set(0,k*Math.PI*2/3,.5);lg.position.set(Math.cos(k*Math.PI*2/3)*.38,.2,-Math.sin(k*Math.PI*2/3)*.38)}hitBox(g,Ln,H,.7,0,H/2,0)}
@@ -882,8 +888,9 @@ function build(){
       if(rs.some(c=>(c.rtype||'split')==='split'))note('info','앞뒤 분리형 카메라 단은 앞(카메라)·뒤(오퍼레이터) 데크를 10cm 띄워 발 디딤 흔들림이 카메라로 전달되지 않게 그렸습니다. 삼각대 다리 벌림(약 1m)이 900 폭 데크 안에 들어오는지 확인하세요.');if(rs.some(c=>(c.rtype||'split')!=='split'))note('info','한 판형 카메라 단은 오퍼레이터가 움직이면 흔들림이 카메라에 전달될 수 있습니다. 망원(박스 렌즈)으로 당길 때는 앞뒤 분리형이 유리합니다.')}}
   // 구조물
   S.rigs.forEach((r,i)=>{const nm=`${RIGS[r.kind].n} ${i+1}`,kg=Math.round(S.lights.filter(l=>l.rig===i).reduce((t,l)=>t+LW[l.type],0)*1.1),L=+r.len||0,H=+r.h||0;
-    if(r.kind==='frame'){const q=frDim(r),fn=`${FR[r.sys].n} ${i+1}`,Ld=G.led,rot0=Math.abs(((+r.rot||0)%180+180)%180)<1,fz2=frontZ+r.z,ra=q.Hh/q.D;
+    if(r.kind==='frame'){const q=frDim(r),fn=`${FR[r.sys].n} ${i+1} (${q.nd}폭 ${Math.max(1,+r.lifts||1)}단)`,Ld=G.led,rot0=Math.abs(((+r.rot||0)%180+180)%180)<1,fz2=frontZ+r.z,ra=q.Hh/q.D;
       if(ra>4)note('stop',`${fn}: 높이 ${q.Hh}m ÷ 폭 ${q.D}m = ${r1(ra)}:1 — 폭이 좁습니다. 폭을 넓히거나 아웃리거·무게추·벽 고정이 필요합니다.`);else if(ra>3)note('warn',`${fn}: 높이 대 폭 ${r1(ra)}:1 — 무게추나 아웃리거로 넘어짐을 막으세요. 폭을 한 단계 넓히면 여유가 생깁니다.`);else note('ok',`${fn}: 높이 ${q.Hh}m, 폭 ${q.D}m (높이 대 폭 ${r1(ra)}:1).`);
+      if(ra>3&&q.nd<3)note('info',`${fn}: ${q.nd+1}폭으로 늘리면 폭 ${r2((q.nd+1)*(+r.dep||1.09))}m, 높이 대 폭 ${r1(q.Hh/((q.nd+1)*(+r.dep||1.09)))}:1이 됩니다.`);
       if(q.Hh>h)note('stop',`${fn}: 높이 ${q.Hh}m가 천장(${h}m)보다 높습니다.`);
       if(rot0){if(fz2-q.D/2<-d/2+.05)note('stop',`${fn}: 뒤쪽이 벽 밖으로 ${r1(-d/2-(fz2-q.D/2))}m 나갑니다. LED의 「뒤 벽에서 m」를 ${r1(q.D+.9)} 이상으로 늘리거나 폭을 줄이세요.`);if(Math.abs(r.x)+q.W/2>w/2)note('stop',`${fn}: 가로 ${q.W}m가 행사장 폭을 벗어납니다.`)}
       if(Ld&&Ld.sw&&rot0&&Math.abs(fz2-Ld.z)<q.D/2+3){const gapz=r2(Ld.z-.05-(fz2+q.D/2));
@@ -904,7 +911,7 @@ function build(){
     if(r.kind!=='layher'&&H>h-.3)note('stop',`${nm}: 높이 ${H}m가 천장(${h}m)에 닿습니다.`);
     if(r.kind!=='layher'&&H<2.3)note('warn',`${nm}: 높이 ${H}m는 사람 머리에 닿을 수 있습니다.`)});
   // LED·무대
-  if(sw>0&&scrH>0){const top=r1((a.h||0)+scrH);if(cab)note('info',`LED 캐비닛 ${cabN}장 약 <b>${Math.round(cabN*(SK==='c55'?7.5:12))}kg</b> (500×500 7.5kg, 500×1000 12kg 기준) — 바닥과 무대 허용 하중을 확인하세요.`);
+  if(sw>0&&scrH>0){const top=r1(base0+scrH);if(lift>.02&&!S.rigs.some(r=>r.kind==='frame'))note('warn',`LED를 바닥에서 ${Math.round(lift*1000)}mm 띄웠는데 뒤 구조물이 없습니다. 레이어·아시바에 걸거나 받침대를 확인하세요.`);if(cab)note('info',`LED 캐비닛 ${cabN}장 (${SK==='c55'?'500×500':hor?'1000×500 가로':'500×1000 세로'}) 약 <b>${Math.round(cabN*(SK==='c55'?7.5:12))}kg</b> (500×500 7.5kg, 500×1000 12kg 기준) — 바닥과 무대 허용 하중을 확인하세요.`);
     if(cab&&!S.rigs.some(r=>r.kind==='frame')&&scrH>2)note('stop',`LED 벽 높이 ${scrH}m는 뒤 구조물 없이 세울 수 없습니다. LED 칸의 「LED 뒤에 구조물 세우기」로 레이어·아시바를 받치거나 트러스에 매달아야 합니다.`);
     if(sup){const Hh=lifts*sup.lift,ra=Hh/sup.dep;note(ra>3?'warn':'ok',`LED 뒤 ${sup.n}: 높이 ${r1(Hh)}m ÷ 깊이 ${sup.dep}m = ${r1(ra)}:1`+(ra>3?' — 무게추나 아웃리거로 넘어짐을 막아야 합니다.':'.'));note('info','LED를 구조물에 거는 방식(행잉 바·브라켓)과 맨 위 수평재의 허용 하중을 확인하세요.')}
     if(top>h)note('stop',`LED 맨 위 ${top}m가 천장(${h}m)보다 높습니다.`)}
