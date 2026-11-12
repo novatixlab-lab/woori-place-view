@@ -86,6 +86,7 @@ const S = {
   tiers:[{name:'뒷줄',cols:4,rows:1,h:60},{name:'앞줄',cols:4,rows:2,h:20}],
   screen:{n:4,h:2.56,cw:0,text:'행사 타이틀'},
   presenter:{mode:'stand',dist:2},
+  when:{date:'',note:''},
   seats:{rows:4,cols:12,chair:-1,layout:'theater',angle:15,tableD:1.8,perTable:10,rise:30,back:3},
   items:[],
   cams:[{name:'CAM 1',x:0,dist:5.5,h:1.7,lens:'xa20',f:30,ext:0,shot:''},{name:'CAM 2',x:-6,dist:3,h:1.7,lens:'xa20',f:15,ext:0,shot:''},{name:'CAM 3',x:6,dist:3,h:1.7,lens:'xa20',f:15,ext:0,shot:''}]
@@ -95,6 +96,7 @@ const HEIGHTS=[[0,'안 씀'],[20,'200mm'],[40,'400mm'],[60,'600mm']],LEDW=1.28;
 const r2=v=>Math.round(v*100)/100;
 const LENS=[[60,'넓게 (전체 풀샷)'],[35,'보통 (무대 전체)'],[20,'당겨서 (발표자 상반신)'],[10,'망원 (얼굴 클로즈업)']];
 let view='3d',_pb=false;
+const whenTxt=()=>{const w=S.when||{};if(!w.date&&!w.note)return '';let d='';if(w.date){const t=new Date(w.date+'T00:00:00');d=isNaN(t)?w.date:`${t.getFullYear()}년 ${t.getMonth()+1}월 ${t.getDate()}일(${'일월화수목금토'[t.getDay()]})`}return [d,w.note].filter(Boolean).join(' · ')};
 // ── 공유(보기 전용): 배치 내용을 주소 뒤(#v=...)에 담는다. 서버에 저장하지 않으므로 어느 웹 주소에 올려도 열린다.
 const VIEW=location.hash.startsWith('#v=')||location.hash.startsWith('#s=');
 const SHARE_BASE='https://novatixlab-lab.github.io/woori-place-view/';   // 보기 전용 화면을 올려 둔 주소 (tools/build_public.py 로 만든 묶음)
@@ -176,7 +178,7 @@ const DEFAULT=JSON.stringify(S);let sceneName='',scenes=[],smsg='';
 function serialize(){const o=JSON.parse(JSON.stringify(S));o.items.forEach(it=>{it.name=CAT[it.id]?CAT[it.id].name:''});o.seats.chairName=CAT[S.seats.chair]?CAT[S.seats.chair].name:'';return o}
 function restore(o){const miss=[];o=JSON.parse(JSON.stringify(o));
   o.items=(o.items||[]).map(it=>{const c=CAT.find(c=>c.name===it.name&&c.ok);if(!c){miss.push(it.name);return null}it.id=c.id;return it}).filter(Boolean);
-  const d=JSON.parse(DEFAULT);o.seats=Object.assign(d.seats,o.seats);o.screen=Object.assign(d.screen,o.screen);o.presenter=Object.assign(d.presenter,o.presenter);(o.cams||[]).forEach(c=>{if(!c.lens){c.lens='xa20';c.f=c.fov?SW/(2*Math.tan(c.fov*Math.PI/360)):20;c.ext=0;c.shot=''}});const ch=CAT.find(c=>c.name===o.seats.chairName&&c.ok);o.seats.chair=ch?ch.id:-1;
+  const d=JSON.parse(DEFAULT);o.seats=Object.assign(d.seats,o.seats);o.screen=Object.assign(d.screen,o.screen);o.presenter=Object.assign(d.presenter,o.presenter);o.when=Object.assign(d.when,o.when);(o.cams||[]).forEach(c=>{if(!c.lens){c.lens='xa20';c.f=c.fov?SW/(2*Math.tan(c.fov*Math.PI/360)):20;c.ext=0;c.shot=''}});const ch=CAT.find(c=>c.name===o.seats.chairName&&c.ok);o.seats.chair=ch?ch.id:-1;
   Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,d,o);return miss}
 function say(m){smsg=m;const e=$('#smsg');if(e)e.textContent=m}
 async function refreshScenes(){try{const r=await fetch('api/scenes');if(!r.ok)throw 0;scenes=await r.json()}catch(e){scenes=null}panel()}
@@ -193,6 +195,7 @@ function panel(){
   <div class="sub">행사장 3D 시안 · 숫자를 바꾸면 그림이 바로 바뀝니다.</div>
   <h2>행사 저장</h2>
   <label>행사 이름<input id="sname" placeholder="예: 11월 OO 행사" value="${sceneName.replace(/"/g,'&quot;')}"></label>
+  <div class="row two" style="margin-top:6px"><label>행사 날짜<input type="date" data-p="when.date" data-str value="${esc((S.when||{}).date||'')}"></label><label>시간 · 메모<input data-p="when.note" data-str placeholder="예: 14:00 리허설 11:00" value="${esc((S.when||{}).note||'')}"></label></div>
   <div class="row two" style="margin-top:6px"><button id="savescene">저장</button><button id="newscene">새로 시작</button></div>
   ${scenes===null?'<div class="note">저장 서버가 꺼져 있어 저장·불러오기를 쓸 수 없습니다.</div>':`<label>저장된 행사 (${scenes.length}건)<select id="loadscene"><option value="">불러올 행사 고르기</option>${scenes.map(n=>`<option ${n===sceneName?'selected':''}>${n.replace(/</g,'&lt;')}</option>`).join('')}</select></label>
   <button class="wide" id="delscene" style="margin-top:6px;color:var(--dim)">고른 행사 지우기</button>`}
@@ -291,7 +294,7 @@ function showSheet(){
     <td>${bd.n}<br>${l.n}${c.ext?' + 2배 익스텐더':''}<br>${r1(lo)}~${Math.round(hi)}mm</td><td>발표자까지 <b>${r1(D)}m</b><br>지금 ${Math.round(f)}mm → <b>${shotName(D*SH/f)}</b><br>가장 넓게: 가로 ${r1(D*camSW(c)/lo)}m<br>가장 당기면: ${shotName(D*SH/hi)}</td>
     <td>${D<=maxB?'바스트 가능':'<b style="color:#c0392b">바스트 불가</b>'}<br>(이 조합은 ${r1(maxB)}m 안에서 바스트)${l.ok&&bd.ok?'':'<br><span style="color:#b9770e">렌즈·센서 값 일부 가정</span>'}</td></tr>`}).join('');
   document.body.insertAdjacentHTML('beforeend',`<div id="sheetbox"><div class="paper"><div class="noprint" style="display:flex;gap:8px;justify-content:flex-end"><button id="printsheet">인쇄 · PDF로 저장</button><button id="closesheet">닫기</button></div>
-  <h1>카메라 배치표</h1><div class="meta"><b>${esc(title)}</b> · ${esc(S.venue.name||'행사장')} · 공간 ${S.venue.w} × ${S.venue.d}m, 높이 ${S.venue.h}m${S.venue.status==='추정'?' (사진으로 어림한 크기 · 실측 필요)':''}<br>
+  <h1>카메라 배치표</h1><div class="meta"><b>${esc(title)}</b>${whenTxt()?' · '+esc(whenTxt()):''} · ${esc(S.venue.name||'행사장')} · 공간 ${S.venue.w} × ${S.venue.d}m, 높이 ${S.venue.h}m${S.venue.status==='추정'?' (사진으로 어림한 크기 · 실측 필요)':''}<br>
   LED ${sw}m × ${S.screen.h}m · 발표자 ${G.sit?'테이블에 앉음':'서서'} · 객석 ${({theater:'일자',curve:'부채꼴',chevron:'V자',round:'원탁',class:'강의식',tier:'계단식'})[S.seats.layout||'theater']} · 카메라 ${S.cams.length}대</div>
   <img class="top" src="${top}"><table><thead><tr><th>카메라</th><th>잡히는 화면</th><th>설치 위치</th><th>본체 · 렌즈</th><th>샷</th><th>확인</th></tr></thead><tbody>${rows}</tbody></table>
   <div class="meta" style="margin-top:10px">W플레이스로 만든 사전 시안입니다. 현장 실측과 리허설에서 다시 확인하세요.</div></div></div>`);
@@ -650,7 +653,7 @@ addEventListener('resize',resize);
 (async()=>{
   if(VIEW){document.body.classList.add('viewer');scenes=null;
     try{const o=location.hash.startsWith('#s=')?await openSealed(location.hash.slice(3)):await unpackScene(location.hash.slice(3));restore(o.s);sceneName=o.n||''}catch(e){document.body.insertAdjacentHTML('beforeend',`<div id="sharebox"><div class="in" style="max-width:480px"><h1>링크를 열지 못했습니다</h1><div class="sub">${e===404?'방금 만든 링크라면 1분쯤 뒤에 다시 열어 주세요.':'주소가 중간에 잘렸을 수 있습니다. 보낸 분에게 링크를 다시 받아 주세요.'}</div></div></div>`)}
-    $('#vtitle').innerHTML=`<b>${esc(sceneName||S.venue.name||'행사장 시안')}</b>${S.venue.name&&sceneName?`<br><span style="color:var(--dim)">${esc(S.venue.name)}</span>`:''}<br><span style="color:var(--dim)">위 버튼으로 카메라별 화면을 볼 수 있습니다 · 끌어서 돌려 보기</span>`;
+    $('#vtitle').innerHTML=`<b>${esc(sceneName||S.venue.name||'행사장 시안')}</b>${whenTxt()?`<br><span style="color:var(--lime)">${esc(whenTxt())}</span>`:''}${S.venue.name&&sceneName?`<br><span style="color:var(--dim)">${esc(S.venue.name)}</span>`:''}<br><span style="color:var(--dim)">위 버튼으로 카메라별 화면을 볼 수 있습니다 · 끌어서 돌려 보기</span>`;
     panel();build();resize();return}
   if(window.PLACE_PUBLIC){   // 인터넷에 올린 묶음: 공유 링크 없이 열면 편집 화면 대신 안내만
     document.body.classList.add('viewer');$('#vtitle').style.display='none';
