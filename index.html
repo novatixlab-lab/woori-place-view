@@ -34,6 +34,11 @@
   #bar .sp{flex:1}
   #view{position:absolute;inset:0}
   canvas{display:block}
+  #palette{display:none;position:absolute;right:12px;top:56px;z-index:3;width:190px;background:rgba(20,23,46,.96);border:1px solid var(--line);border-radius:12px;padding:10px;max-height:calc(100% - 80px);overflow:auto}
+  #palette.open{display:block}#palette h3{font-size:12px;color:var(--lime);margin:6px 0 6px}
+  .pi{display:flex;align-items:center;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:8px;margin-bottom:5px;font-size:13px;cursor:grab;user-select:none;touch-action:none}.pi:hover,.pi.armed{border-color:var(--lime)}
+  .pi i{width:12px;height:12px;border-radius:50%;background:#fff;flex:none}.pi i.sq{border-radius:2px;background:#9aa0a8}
+  #ghost{position:fixed;z-index:50;pointer-events:none;background:var(--lime);color:#0B0D1E;font-weight:700;font-size:12.5px;padding:5px 10px;border-radius:999px;transform:translate(-50%,-150%)}
   #selchip{display:none;position:absolute;left:12px;top:56px;z-index:2;background:var(--lime);color:#0B0D1E;font-weight:700;font-size:13px;padding:5px 12px;border-radius:999px}
   .pick{outline:2px solid var(--lime);outline-offset:3px;border-radius:8px;transition:outline-color .2s}
   body:not(.viewer) #frame{cursor:grab}
@@ -70,7 +75,7 @@
 <body>
 <div id="app">
   <div id="panel"></div>
-  <div id="main"><div id="bar"></div><div id="view"></div><div id="frame"><span id="framecap"></span></div><div id="vtitle"></div><div id="selchip"></div></div>
+  <div id="main"><div id="bar"></div><div id="view"></div><div id="frame"><span id="framecap"></span></div><div id="vtitle"></div><div id="palette"></div><div id="selchip"></div></div>
 </div>
 <meta name="robots" content="noindex,nofollow">
 <script>window.PLACE_PUBLIC=1</script>
@@ -84,9 +89,10 @@ const S = {
   venue:{w:20,d:11,h:5},
   unit:'1.2x1.2',
   tiers:[{name:'뒷줄',cols:4,rows:1,h:60},{name:'앞줄',cols:4,rows:2,h:20}],
-  screen:{n:4,h:2.56,cw:0,text:'행사 타이틀'},
+  screen:{n:4,h:2.56,cw:0,kind:'fold',sup:'none',text:'행사 타이틀'},
   presenter:{mode:'stand',dist:2},
   when:{date:'',note:''},
+  rigs:[],lights:[],
   seats:{rows:4,cols:12,chair:-1,layout:'theater',angle:15,tableD:1.8,perTable:10,rise:30,back:3},
   items:[],
   cams:[{name:'CAM 1',x:0,dist:5.5,h:1.7,lens:'xa20',f:30,ext:0,shot:''},{name:'CAM 2',x:-6,dist:3,h:1.7,lens:'xa20',f:15,ext:0,shot:''},{name:'CAM 3',x:6,dist:3,h:1.7,lens:'xa20',f:15,ext:0,shot:''}]
@@ -116,6 +122,11 @@ async function openSealed(hash){const [id,k]=hash.split('.');if(!/^[A-Za-z0-9]{8
 async function unpackScene(t){const u8=unb64u(t.slice(1));return JSON.parse(new TextDecoder().decode(t[0]==='z'?await pipe(u8,new DecompressionStream('deflate-raw')):u8))}
 // 카메라: 블랙매직 URSA Broadcast G2 + B4 렌즈 = 2/3형(화면 가로 9.59mm, 16:9)
 const SW=9.59;
+const SUP={layher:{n:'레이어(레이허)',bay:2.07,lift:2,dep:1.09},asiba:{n:'아시바(강관 비계)',bay:1.829,lift:1.7,dep:1.219}};
+const LIGHTS={mspot:{n:'무빙 스팟',beam:14},mwash:{n:'무빙 워시',beam:36},par:{n:'LED 파',beam:30},profile:{n:'프로파일(엘립소이달)',beam:19},fresnel:{n:'프레넬',beam:42},blinder:{n:'블라인더',beam:65},bar:{n:'LED 바',beam:55}};
+const RIGS={batten:{n:'바턴 (파이프)'},truss:{n:'트러스 290각'},layher:{n:'레이어 타워'}};
+const LCOL=['#ffffff','#ffd9a0','#ff5fa2','#4fc3ff','#b388ff','#5ff0c0','#ff6b6b','#D4F53C'];
+const AIMS=[['stage','무대(발표자)'],['led','LED·뒤 벽'],['aud','객석'],['down','바로 아래'],['up','위로']];
 const CAMCOL=['#D4F53C','#ff5fa2','#4fc3ff','#ffb347','#b388ff','#5ff0c0','#ff6b6b','#ffffff'],camCol=(c,i)=>c.color||CAMCOL[i%CAMCOL.length];
 // 본체·해상도 설정에 따라 실제로 쓰는 센서 가로 폭(2/3형 환산, mm)
 const BODIES={g2_4k:{n:'URSA G2 · 4K 설정',sw:9.59,ok:1,m:'B4 렌즈 원래 화각(2/3형) · 공식 사양'},
@@ -178,7 +189,7 @@ const DEFAULT=JSON.stringify(S);let sceneName='',scenes=[],smsg='';
 function serialize(){const o=JSON.parse(JSON.stringify(S));o.items.forEach(it=>{it.name=CAT[it.id]?CAT[it.id].name:''});o.seats.chairName=CAT[S.seats.chair]?CAT[S.seats.chair].name:'';return o}
 function restore(o){const miss=[];o=JSON.parse(JSON.stringify(o));
   o.items=(o.items||[]).map(it=>{const c=CAT.find(c=>c.name===it.name&&c.ok);if(!c){miss.push(it.name);return null}it.id=c.id;return it}).filter(Boolean);
-  const d=JSON.parse(DEFAULT);o.seats=Object.assign(d.seats,o.seats);o.screen=Object.assign(d.screen,o.screen);o.presenter=Object.assign(d.presenter,o.presenter);o.when=Object.assign(d.when,o.when);(o.cams||[]).forEach(c=>{if(!c.lens){c.lens='xa20';c.f=c.fov?SW/(2*Math.tan(c.fov*Math.PI/360)):20;c.ext=0;c.shot=''}});const ch=CAT.find(c=>c.name===o.seats.chairName&&c.ok);o.seats.chair=ch?ch.id:-1;
+  const d=JSON.parse(DEFAULT);o.seats=Object.assign(d.seats,o.seats);o.screen=Object.assign(d.screen,o.screen);o.presenter=Object.assign(d.presenter,o.presenter);o.when=Object.assign(d.when,o.when);o.rigs=o.rigs||[];o.lights=(o.lights||[]).filter(l=>LIGHTS[l.type]);(o.cams||[]).forEach(c=>{if(!c.lens){c.lens='xa20';c.f=c.fov?SW/(2*Math.tan(c.fov*Math.PI/360)):20;c.ext=0;c.shot=''}});const ch=CAT.find(c=>c.name===o.seats.chairName&&c.ok);o.seats.chair=ch?ch.id:-1;
   Object.keys(S).forEach(k=>delete S[k]);Object.assign(S,d,o);return miss}
 function say(m){smsg=m;const e=$('#smsg');if(e)e.textContent=m}
 async function refreshScenes(){try{const r=await fetch('api/scenes');if(!r.ok)throw 0;scenes=await r.json()}catch(e){scenes=null}panel()}
@@ -215,8 +226,10 @@ function panel(){
   <div class="row">${num(`tiers.${i}.cols`,'가로 장 수',1)}${num(`tiers.${i}.rows`,'세로 장 수',1)}<label>높이<select data-p="tiers.${i}.h">${HEIGHTS.map(x=>`<option value="${x[0]}" ${t.h==x[0]?'selected':''}>${x[1]}</option>`).join('')}</select></label></div>`).join('')}
   <div class="note" id="count"></div>
   <h2 data-sec="led">LED 화면</h2>
-  <div class="row">${num('screen.n','폴딩 대 수',1)}${num('screen.cw','가로 직접 m',0.5)}${num('screen.h','높이 m',0.1)}</div>
-  <div class="sub" style="margin:0 0 6px">폴딩 LED는 1대 가로 1,280mm. 「가로 직접」에 숫자를 넣으면 그 크기의 LED 벽으로 그립니다(0이면 폴딩 대 수 기준).</div>
+  <div class="row two"><label>종류<select data-p="screen.kind" data-str>${[['fold','폴딩 LED (1대 1,280mm)'],['c55','캐비닛 500 × 500'],['c510','캐비닛 500 × 1000']].map(o=>`<option value="${o[0]}" ${(S.screen.kind||'fold')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label>
+  <label>뒤 구조물<select data-p="screen.sup" data-str>${[['none','없음'],['layher','레이어(레이허)'],['asiba','아시바(강관 비계)']].map(o=>`<option value="${o[0]}" ${(S.screen.sup||'none')===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label></div>
+  <div class="row">${num('screen.n','폴딩 대 수',1)}${num('screen.cw','가로 m',0.5)}${num('screen.h','높이 m',0.5)}</div>
+  <div class="sub" style="margin:0 0 6px">폴딩은 대 수로(가로 m를 넣으면 그 크기 벽으로), 캐비닛은 가로·높이 m를 넣으면 장 수에 맞게 맞춰집니다.</div>
   <label>화면에 띄울 글자<input data-p="screen.text" data-str value="${esc(S.screen.text||'')}"></label>
   <div class="note" id="ledn"></div>
   <h2 data-sec="presenter">발표자</h2>
@@ -241,6 +254,16 @@ function panel(){
   <h2>필요 수량 확인</h2>
   <div class="note" id="tally"></div>
   <button class="wide" id="showcat">비품 목록 · 치수 확인표 보기</button>
+  <h2 data-sec="lights">조명 · 구조물</h2>
+  <div class="sub" style="margin:0 0 8px">위쪽 「조명·구조물」을 눌러 종류를 끌어다 화면에 놓으세요. 놓은 뒤에는 화면에서 끌어서 옮깁니다. 조명을 바턴·트러스·레이어 가까이에 놓으면 거기에 걸립니다.</div>
+  ${S.rigs.map((r,i)=>`<div class="cam" data-sec="rig:${i}"><div class="top"><b>${RIGS[r.kind].n} ${i+1}</b><button class="x" data-delrig="${i}">빼기</button></div>
+  <div class="row">${num(`rigs.${i}.x`,'좌우 m')}${num(`rigs.${i}.z`,'무대에서 m')}${num(`rigs.${i}.h`,'높이 m')}</div>
+  ${r.kind==='layher'?'':`<div class="row two">${num(`rigs.${i}.len`,'길이 m')}${num(`rigs.${i}.rot`,'회전 °',15)}</div>`}</div>`).join('')}
+  ${S.lights.map((l,i)=>`<div class="cam" data-sec="light:${i}" style="border-left:3px solid ${l.color||'#fff'}"><div class="top"><b>${LIGHTS[l.type].n} ${i+1}</b><button class="x" data-dellight="${i}">빼기</button></div>
+  <div class="sws">${LCOL.map(k=>`<i data-lcol="${i},${k}" title="빛 색" style="background:${k}" class="${(l.color||'#ffffff')===k?'on':''}"></i>`).join('')}</div>
+  <div class="sub" style="margin:0 0 6px">${S.rigs[l.rig]?`걸린 곳: <b style="color:var(--lime)">${RIGS[S.rigs[l.rig].kind].n} ${l.rig+1}</b>`:'바닥 · 스탠드'}</div>
+  <div class="row">${num(`lights.${i}.x`,'좌우 m')}${num(`lights.${i}.z`,'무대에서 m')}${num(`lights.${i}.h`,'높이 m',0.1)}</div>
+  <label>비추는 곳<select data-p="lights.${i}.aim" data-str>${AIMS.map(o=>`<option value="${o[0]}" ${l.aim===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></label></div>`).join('')}
   <h2>카메라</h2>
   ${S.cams.map((c,i)=>`<div class="cam" data-sec="cam:${i}" style="border-left:3px solid ${camCol(c,i)}"><div class="top"><b>${c.name}</b><button class="x" data-del="${i}">빼기</button></div>
   <div class="sws">${CAMCOL.map(k=>`<i data-col="${i},${k}" title="촬영 범위 색" style="background:${k}" class="${camCol(c,i)===k?'on':''}"></i>`).join('')}</div>
@@ -259,7 +282,7 @@ function panel(){
 }
 function bar(){
   const v=[['3d','입체'],['stage','무대 가까이'],['top','위에서'],['seat','객석에서'],...S.cams.map((c,i)=>['cam'+i,c.name+' 화면'])];
-  $('#bar').innerHTML=v.map(([k,n])=>`<button data-v="${k}" class="${view===k?'on':''}">${n}</button>`).join('')+`<span class="sp"></span><button id="sheet">카메라 배치표</button>${VIEW?'':'<button id="share">공유하기</button>'}<button id="save">이미지 저장</button>`;
+  $('#bar').innerHTML=v.map(([k,n])=>`<button data-v="${k}" class="${view===k?'on':''}">${n}</button>`).join('')+`<span class="sp"></span>${VIEW?'':'<button id="palbtn">조명·구조물</button>'}<button id="sheet">카메라 배치표</button>${VIEW?'':'<button id="share">공유하기</button>'}<button id="save">이미지 저장</button>`;
 }
 document.addEventListener('input',e=>{
   if(e.target.id==='sname'){sceneName=e.target.value;return}
@@ -269,7 +292,7 @@ document.addEventListener('input',e=>{
   const p=e.target.dataset.p; if(!p)return;
   const v=e.target.dataset.str!==undefined?e.target.value:parseFloat(e.target.value);
   if(typeof v==='number'&&isNaN(v))return;
-  set(p,v); if(/^cams\.\d+\.(lens|ext|body)$/.test(p)){const c=S.cams[+p.split('.')[1]],isM=!!(LENSES[c.lens]||{}).mft;
+  set(p,v); if(/^lights\.\d+\.(x|z)$/.test(p)){snapLight(S.lights[+p.split('.')[1]]);panel()} if(/^cams\.\d+\.(lens|ext|body)$/.test(p)){const c=S.cams[+p.split('.')[1]],isM=!!(LENSES[c.lens]||{}).mft;
     if(p.endsWith('.lens')){if(isM)c.body='st4k_mft';else if(c.body==='st4k_mft')c.body='st4k'}   // MFT 렌즈는 스튜디오 카메라에만
     if(p.endsWith('.body')){if(c.body==='st4k_mft'&&!isM)c.lens='mft14';else if(c.body!=='st4k_mft'&&isM)c.lens='xa20'}
     c.f=camF(c);if(c.shot)setShot(c,c.shot);panel()} if(p==='seats.layout'){if(v==='round')Object.assign(S.seats,{rows:3,cols:4,perTable:10});else if(v==='class')Object.assign(S.seats,{rows:5,cols:4,perTable:3});else if(v==='tier')Object.assign(S.seats,{rows:9,cols:12});else Object.assign(S.seats,{rows:4,cols:12});panel()} build();
@@ -367,6 +390,10 @@ document.addEventListener('click',async e=>{
   if(t.id==='closesheet')$('#sheetbox').remove();
   if(t.id==='printsheet')window.print();
   if(t.id==='findvenue')showVenues();
+  if(t.id==='palbtn'){const p=$('#palette');p.classList.toggle('open');p.innerHTML=`<h3>조명 (끌어다 놓기)</h3>${Object.entries(LIGHTS).map(([k,l])=>`<div class="pi" data-new="light:${k}"><i></i>${l.n}</div>`).join('')}<h3>구조물</h3>${Object.entries(RIGS).map(([k,r])=>`<div class="pi" data-new="rig:${k}"><i class="sq"></i>${r.n}</div>`).join('')}<div class="sub" style="margin:6px 0 0">끌어서 화면에 놓거나, 한 번 누른 뒤 놓을 자리를 누르세요.</div>`}
+  if(t.dataset.delrig!==undefined){const k=+t.dataset.delrig;S.rigs.splice(k,1);S.lights.forEach(l=>{if(l.rig===k)l.rig=-1;else if(l.rig>k)l.rig--});selectTag('');panel();build()}
+  if(t.dataset.dellight!==undefined){S.lights.splice(+t.dataset.dellight,1);selectTag('');panel();build()}
+  if(t.dataset.lcol){const [i,k]=t.dataset.lcol.split(',');S.lights[+i].color=k;panel();build()}
   if(t.dataset.col){const [i,k]=t.dataset.col.split(',');S.cams[+i].color=k;panel();build()}
   if(t.dataset.shot){const [i,k]=t.dataset.shot.split(',');setShot(S.cams[+i],k);view='cam'+i;panel();build()}
   if(t.id==='lookbtn')$('#lookfile').click();
@@ -481,16 +508,38 @@ function drawItem(p,c,x,y,z){
   const o=box(w,h,d,m,x,y+h/2,z,p);
   o.add(new THREE.LineSegments(new THREE.EdgesGeometry(o.geometry),new THREE.LineBasicMaterial({color:c.sure?0xD4F53C:0xffb347})));
 }
+// ── 조명 위치: 구조물에 걸려 있으면 그 구조물을 따라간다
+function rigAxis(r){const f=-(+r.rot||0)*Math.PI/180;return [Math.cos(f),-Math.sin(f)]}
+function lightPos(l){const fz=G.frontZ||0,r=S.rigs[l.rig];let x=+l.x||0,z=fz+(+l.z||0),y=Math.max(.15,+l.h||.3),hang=false;
+  if(r){if(r.kind==='layher'){x=r.x;z=fz+r.z+.62;y=Math.min(Math.max(.5,+l.h||r.h-.4),r.h)}else{const [ax,az]=rigAxis(r),t=Math.max(-r.len/2,Math.min(r.len/2,+l.t||0));x=r.x+ax*t;z=fz+r.z+az*t;y=r.h-(r.kind==='truss'?.18:.03)-.26;hang=true}}
+  return {x,y,z,hang,v:new THREE.Vector3(x,y,z)}}
+function snapLight(l){let best=-1,bd=.9,bt=0;S.rigs.forEach((r,i)=>{const dx=l.x-r.x,dz=l.z-r.z;
+    if(r.kind==='layher'){const dd=Math.hypot(dx,dz);if(dd<1.3&&dd-.5<bd){best=i;bd=dd-.5;bt=0}}
+    else{const [ax,az]=rigAxis(r),t=dx*ax+dz*az,perp=Math.abs(-dx*az+dz*ax);if(Math.abs(t)<=r.len/2+.4&&perp<bd){best=i;bd=perp;bt=t}}});
+  const was=l.rig;l.rig=best;l.t=r1(bt);if(best!==was)l.aim=best>=0?'stage':'up';if(best>=0&&S.rigs[best].kind==='layher'&&!(l.h>.5))l.h=r1(S.rigs[best].h-.4)}
+function floorHit(cx,cy,y=0){const r=renderer.domElement.getBoundingClientRect();if(cx<r.left||cx>r.right||cy<r.top||cy>r.bottom)return null;
+  ray.setFromCamera(new THREE.Vector2((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height)*2+1),camera);const v=new THREE.Vector3();return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,1,0),-y),v)?v:null}
+function addNew(spec,hp){const [kind,type]=spec.split(':'),fz=G.frontZ||0,x=r1(hp.x),z=r1(hp.z-fz);let tag;
+  if(kind==='rig'){S.rigs.push({kind:type,x,z,len:6,h:type==='layher'?4:Math.max(2.5,Math.min(5,r1(S.venue.h-1))),rot:0});tag='rig:'+(S.rigs.length-1)}
+  else{const l={type,x,z,h:.3,color:'#ffffff',rig:-1,t:0,aim:'up'};snapLight(l);S.lights.push(l);tag='light:'+(S.lights.length-1)}
+  panel();build();selectTag(tag)}
+function tagY(t){const i=+t.split(':')[1];if(t.startsWith('rig:'))return S.rigs[i].kind==='layher'?0:+S.rigs[i].h;if(t.startsWith('light:'))return lightPos(S.lights[i]).y;if(t.startsWith('cam:'))return camPos(S.cams[i]).y;return 0}
+function moveTag(t,hp){const i=+t.split(':')[1],fz=G.frontZ||0,x=r1(hp.x),z=r1(hp.z-fz);
+  if(t.startsWith('cam:')){S.cams[i].x=x;S.cams[i].dist=z}else if(t.startsWith('item:')){S.items[i].x=x;S.items[i].z=z}
+  else if(t.startsWith('rig:')){S.rigs[i].x=x;S.rigs[i].z=z}else if(t.startsWith('light:')){const l=S.lights[i];l.x=x;l.z=z;l.rig=-1}}
+let armed='';
 // ── 화면에서 눌러 고르기: 그릴 때 물체마다 무엇인지(무대·LED·객석·카메라…) 표시해 둔다
-let _ti=[0,0],_tt='',selTag='';
+let _ti=[0,0],_tt='',selTag='';const ray=new THREE.Raycaster();
+const HITM=new THREE.MeshBasicMaterial({transparent:true,opacity:0,depthWrite:false});
+function hitBox(p,w,h,d,x,y,z){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),HITM);o.position.set(x,y,z);o.userData.hit=true;p.add(o)}   // 가는 물체도 잘 눌리게 하는 보이지 않는 손잡이
 function tagTo(next){[dyn,helpers].forEach((g,k)=>{for(let i=_ti[k];i<g.children.length;i++)g.children[i].userData.sel=_tt;_ti[k]=g.children.length});_tt=next}
-const SELNAME=t=>t.startsWith('cam:')?(S.cams[+t.slice(4)]||{}).name:t.startsWith('item:')?(CAT[(S.items[+t.slice(5)]||{}).id]||{}).name:({stage:'무대',led:'LED 화면',presenter:'발표자',seats:'객석'})[t];
+const SELNAME=t=>t.startsWith('rig:')?(S.rigs[+t.slice(4)]?RIGS[S.rigs[+t.slice(4)].kind].n+' '+(+t.slice(4)+1):''):t.startsWith('light:')?(S.lights[+t.slice(6)]?LIGHTS[S.lights[+t.slice(6)].type].n+' '+(+t.slice(6)+1):''):t.startsWith('cam:')?(S.cams[+t.slice(4)]||{}).name:t.startsWith('item:')?(CAT[(S.items[+t.slice(5)]||{}).id]||{}).name:({stage:'무대',led:'LED 화면',presenter:'발표자',seats:'객석'})[t];
 function selectTag(t){selTag=t;const chip=$('#selchip');chip.textContent=t?'선택: '+(SELNAME(t)||''):'';chip.style.display=t?'block':'none';
   document.querySelectorAll('.pick').forEach(e=>e.classList.remove('pick'));if(!t||VIEW)return;
   const e=document.querySelector(`[data-sec="${t}"]`);if(e){e.classList.add('pick');e.scrollIntoView({behavior:'smooth',block:'center'})}}
-const ray=new THREE.Raycaster();
+
 function pickAt(cx,cy){const r=renderer.domElement.getBoundingClientRect();ray.setFromCamera(new THREE.Vector2((cx-r.left)/r.width*2-1,-((cy-r.top)/r.height)*2+1),camera);
-  for(const h of ray.intersectObjects(dyn.children,true)){let o=h.object;if(!o.visible||o.type==='LineSegments'||(o.material&&o.material.transparent&&o.material.opacity<.5))continue;
+  for(const h of ray.intersectObjects(dyn.children,true)){let o=h.object;if(!o.userData.hit&&(!o.visible||o.type==='LineSegments'||(o.material&&o.material.transparent&&o.material.opacity<.5)))continue;
     while(o&&o.userData.sel===undefined)o=o.parent;if(o&&o.userData.sel)return o.userData.sel;if(o&&o.userData.sel==='')return ''}return ''}
 function build(){
   dyn.traverse(o=>{if(o.geometry)o.geometry.dispose()});tmpTex.forEach(t=>t.dispose());tmpTex=[];
@@ -534,7 +583,7 @@ function build(){
   }
   tagTo('stage');
   // 무대
-  const zBack=-d/2+1,a=tier(S.tiers[0],zBack),b=tier(S.tiers[1],zBack+a.d);
+  const sup=SUP[S.screen.sup],zBack=-d/2+Math.max(1,sup?sup.dep+.35:0),a=tier(S.tiers[0],zBack),b=tier(S.tiers[1],zBack+a.d);
   const frontZ=zBack+a.d+b.d,topH=Math.max(a.h||0,b.h||0),stageMidZ=zBack+(a.d+b.d)/2;
   const PR=S.presenter||{mode:'stand',dist:2},noDeck=!a.n&&!b.n,sit=PR.mode==='table';
   const pz=noDeck?zBack+(+PR.dist||0):b.n?zBack+a.d+b.d/2:zBack+a.d/2,ph=b.n?b.h:(a.h||0);
@@ -542,16 +591,22 @@ function build(){
   const floorY=(x,z)=>{for(const r of rects)if(Math.abs(x)<=r[0]&&z>=r[1]&&z<=r[2])return r[3];return 0};
   G={frontZ,topH,stageMidZ,ph,pz,sit,aim:new THREE.Vector3(0,ph+(sit?.95:1.3),pz)};
   $('#count').innerHTML=`${S.tiers[0].name} <b>${a.n}장</b> (${a.w}m × ${a.d}m)<br>${S.tiers[1].name} <b>${b.n}장</b> (${b.w}m × ${b.d}m)<br>데크 모두 <b>${a.n+b.n}장</b> · 전체 깊이 ${r2(a.d+b.d)}m`;
-  const cwid=+S.screen.cw>0?+S.screen.cw:0,UW=cwid?.5:LEDW,sw=cwid?r2(cwid):r2(Math.max(0,Math.round(S.screen.n))*LEDW),gap=Math.round((a.w-sw)*500);
-  $('#ledn').innerHTML=sw?`LED 전체 <b>가로 ${sw}m × 높이 ${S.screen.h}m</b>${cwid?' (LED 벽)':''}<br>`+(a.n?(gap>=0?`무대가 LED보다 좌우 <b>${gap}mm씩 여유</b>`:`무대가 LED보다 좌우 <b>${-gap}mm씩 좁음</b>`):''):'LED 없음';
-  if(a.n)label(`${S.tiers[0].name} ${a.w}×${a.d}m · 높이 ${S.tiers[0].h*10}mm`,0,a.h+S.screen.h+1.1,zBack+a.d/2);
+  const SK=S.screen.kind||'fold',cab=SK==='c55'||SK==='c510',UH=SK==='c510'?1:.5,cwid=cab?Math.max(.5,Math.round((+S.screen.cw||Math.round(S.screen.n)*LEDW)/.5)*.5):(+S.screen.cw>0?+S.screen.cw:0),UW=cwid?.5:LEDW,
+    scrH=cab?Math.max(UH,Math.round(S.screen.h/UH)*UH):+S.screen.h,sw=cwid?r2(cwid):r2(Math.max(0,Math.round(S.screen.n))*LEDW),gap=Math.round((a.w-sw)*500),cabN=cab?Math.round(sw/.5)*Math.round(scrH/UH):0,
+    bays=sup?Math.max(1,Math.ceil(sw/sup.bay)):0,lifts=sup?Math.max(1,Math.ceil(((a.h||0)+scrH)/sup.lift)):0;
+  $('#ledn').innerHTML=sw?`LED 전체 <b>가로 ${sw}m × 높이 ${scrH}m</b>${cab?`<br>캐비닛 ${SK==='c55'?'500×500':'500×1000'} <b>${cabN}장</b> (가로 ${Math.round(sw/.5)} × 세로 ${Math.round(scrH/UH)})`:cwid?' (LED 벽)':''}${sup&&sw?`<br>뒤 구조물: ${sup.n} <b>${bays}칸 × ${lifts}단</b> · 깊이 ${sup.dep}m`:''}<br>`+(a.n?(gap>=0?`무대가 LED보다 좌우 <b>${gap}mm씩 여유</b>`:`무대가 LED보다 좌우 <b>${-gap}mm씩 좁음</b>`):''):'LED 없음';
+  if(a.n)label(`${S.tiers[0].name} ${a.w}×${a.d}m · 높이 ${S.tiers[0].h*10}mm`,0,a.h+scrH+1.1,zBack+a.d/2);
   if(b.n)label(`${S.tiers[1].name} ${b.w}×${b.d}m · 높이 ${S.tiers[1].h*10}mm`,0,b.h+.45,frontZ+.5,.8);
   tagTo('led');
   // 뒤 화면
-  if(sw>0&&S.screen.h>0){const sy=(a.h||0)+S.screen.h/2,n=Math.max(1,Math.round(sw/UW));
-    box(sw,S.screen.h,.1,mat.dark,0,sy,zBack+a.d/2);
-    for(let i=1;i<n;i++)box(.012,S.screen.h,.01,mat.dark,-sw/2+UW*i,sy,zBack+a.d/2+.062,dyn,false);
-    const scr=new THREE.Mesh(new THREE.PlaneGeometry(sw,S.screen.h-.02),new THREE.MeshBasicMaterial({map:ledTex(S.screen.text||'',S.screen.h/sw),toneMapped:false}));scr.position.set(0,sy,zBack+a.d/2+.058);dyn.add(scr);
+  if(sw>0&&scrH>0){const sy=(a.h||0)+scrH/2,n=Math.max(1,Math.round(sw/UW));
+    box(sw,scrH,.1,mat.dark,0,sy,zBack+a.d/2);
+    for(let i=1;i<n;i++)box(.012,scrH,.01,mat.dark,-sw/2+UW*i,sy,zBack+a.d/2+.062,dyn,false);
+    if(cab)for(let j=1;j<Math.round(scrH/UH);j++)box(sw,.012,.01,mat.dark,0,(a.h||0)+UH*j,zBack+a.d/2+.062,dyn,false);
+    if(sup){const mt=M(0x9aa0a8,{metalness:.6,roughness:.4}),W=bays*sup.bay,Hh=lifts*sup.lift,zf=zBack+a.d/2-.12,zb=zf-sup.dep;
+      for(let i=0;i<=bays;i++){const x=-W/2+sup.bay*i;for(const z of[zf,zb])box(.048,Hh,.048,mt,x,Hh/2,z,dyn,false);for(let k=0;k<=lifts;k++)box(.04,.04,sup.dep,mt,x,Math.max(.1,sup.lift*k),(zf+zb)/2,dyn,false)}
+      for(let k=0;k<=lifts;k++)for(const z of[zf,zb])box(W,.04,.04,mt,0,Math.max(.1,sup.lift*k),z,dyn,false)}
+    const scr=new THREE.Mesh(new THREE.PlaneGeometry(sw,scrH-.02),new THREE.MeshBasicMaterial({map:ledTex(S.screen.text||'',scrH/sw),toneMapped:false}));scr.position.set(0,sy,zBack+a.d/2+.058);dyn.add(scr);
     const glow=new THREE.PointLight(0x8a7cff,.45,Math.max(10,sw*2.5));glow.position.set(0,sy,zBack+a.d/2+1.2);dyn.add(glow)}
   tagTo('');
   // 무대 조명
@@ -600,7 +655,30 @@ function build(){
     const g=new THREE.Group();g.position.set(it.x,floorY(it.x,frontZ+it.z),frontZ+it.z);g.rotation.y=-(it.rot||0)*Math.PI/180;dyn.add(g);
     for(let i=0;i<nx;i++)for(let j=0;j<nz;j++)drawItem(g,c,(i-(nx-1)/2)*(w+gp),0,(j-(nz-1)/2)*(dd+gp));
     tl.push(`${c.name} <b>${nx*nz}개</b>${c.sure?'':' <span style="color:#ffb347">(치수 미확인)</span>'}`)});
-  tl.push(`카메라 <b>${S.cams.length}대</b>`,(cwid?`LED 벽 <b>${sw} × ${S.screen.h}m</b>`:`폴딩 LED <b>${Math.max(0,Math.round(S.screen.n))}대</b>`));
+  tl.push(`카메라 <b>${S.cams.length}대</b>`,(cab?`LED 캐비닛 <b>${cabN}장</b> (${sw} × ${scrH}m)`:cwid?`LED 벽 <b>${sw} × ${scrH}m</b>`:`폴딩 LED <b>${Math.max(0,Math.round(S.screen.n))}대</b>`));
+  // 구조물(바턴·트러스·레이어 타워)
+  const metal=M(0xb9bcc2,{metalness:.7,roughness:.35});
+  S.rigs.forEach((r,i)=>{tagTo('rig:'+i);const g=new THREE.Group();g.position.set(r.x,0,frontZ+r.z);g.rotation.y=-(+r.rot||0)*Math.PI/180;dyn.add(g);const H=Math.max(.5,+r.h||4),Ln=Math.max(.5,+r.len||6);
+    if(r.kind==='layher'){for(const ax of[-1,1])for(const az of[-1,1])box(.048,H,.048,metal,ax*.545,H/2,az*.545,g);for(let y=.2;y<=H+.01;y+=2)for(const k of[-1,1]){box(1.09,.04,.04,metal,0,Math.min(y,H),k*.545,g,false);box(.04,.04,1.09,metal,k*.545,Math.min(y,H),0,g,false)}}
+    else if(r.kind==='truss'){for(const ay of[-1,1])for(const az of[-1,1])box(Ln,.05,.05,metal,0,H+ay*.12,az*.12,g);for(let x=-Ln/2;x<=Ln/2+.01;x+=.5)for(const az of[-1,1]){box(.025,.24,.025,metal,x,H,az*.12,g,false);box(.025,.025,.24,metal,x,H+az*.12,0,g,false)}}
+    else{const b=new THREE.Mesh(new THREE.CylinderGeometry(.025,.025,Ln,10),mat.dark);b.rotation.z=Math.PI/2;b.position.y=H;b.castShadow=true;g.add(b)}
+    if(r.kind==='layher')hitBox(g,1.1,H,1.1,0,H/2,0);else hitBox(g,Ln,.4,.4,0,H,0);
+    if(r.kind!=='layher')for(const k of[-1,1])box(.012,Math.max(.1,h-H),.012,mat.dark,k*Ln*.4,H+Math.max(.1,h-H)/2,0,g,false);
+    label(`${RIGS[r.kind].n} ${i+1}${r.kind==='layher'?'':' · '+Ln+'m'} · 높이 ${H}m`,r.x,H+.6,frontZ+r.z,.5)});
+  // 조명
+  const lightN={};
+  S.lights.forEach((l,i)=>{tagTo('light:'+i);const P=lightPos(l),lt=LIGHTS[l.type],col=new THREE.Color(l.color||'#ffffff');lightN[lt.n]=(lightN[lt.n]||0)+1;
+    const T=l.aim==='down'?new THREE.Vector3(P.x,0,P.z+.01):l.aim==='up'?new THREE.Vector3(P.x,h,P.z-.4):l.aim==='aud'?new THREE.Vector3(P.x*.5,1,frontZ+7):l.aim==='led'?new THREE.Vector3(P.x*.7,(a.h||0)+scrH/2,zBack+a.d/2):new THREE.Vector3(P.x*.3,ph+1.1,pz);
+    const g=new THREE.Group();g.position.set(P.x,P.y,P.z);g.lookAt(T);dyn.add(g);hitBox(g,.5,.5,.5,0,0,0);
+    if(l.type==='bar')box(1,.1,.12,mat.dark,0,0,0,g);else if(l.type==='blinder')box(.5,.28,.14,mat.dark,0,0,0,g);else if(l.type==='par'){const c=new THREE.Mesh(new THREE.CylinderGeometry(.12,.1,.2,16),mat.dark);c.rotation.x=Math.PI/2;c.castShadow=true;g.add(c)}
+    else if(l.type==='profile'||l.type==='fresnel'){const c=new THREE.Mesh(new THREE.CylinderGeometry(.09,.1,l.type==='profile'?.5:.3,16),mat.dark);c.rotation.x=Math.PI/2;c.castShadow=true;g.add(c)}else box(.22,.22,.32,mat.dark,0,0,0,g);
+    const lens=new THREE.Mesh(l.type==='bar'?new THREE.PlaneGeometry(.96,.07):l.type==='blinder'?new THREE.PlaneGeometry(.44,.22):new THREE.CircleGeometry(.085,20),new THREE.MeshBasicMaterial({color:col,toneMapped:false}));lens.position.z=l.type==='profile'?.26:.17;g.add(lens);
+    if(P.hang)box(.03,.24,.03,mat.dark,P.x,P.y+.22,P.z,dyn,false);else if(P.y>.5)box(.04,P.y,.04,mat.dark,P.x,P.y/2,P.z,dyn,false);
+    const L=P.v.distanceTo(T),rad=Math.tan(lt.beam*Math.PI/360)*L,cg=new THREE.ConeGeometry(rad,L,28,1,true);cg.translate(0,-L/2,0);
+    const cone=new THREE.Mesh(cg,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.1,depthWrite:false,blending:THREE.AdditiveBlending,side:THREE.DoubleSide,toneMapped:false}));
+    cone.position.copy(P.v);cone.quaternion.setFromUnitVectors(new THREE.Vector3(0,-1,0),T.clone().sub(P.v).normalize());helpers.add(cone)});
+  Object.entries(lightN).forEach(([n,k])=>tl.push(`${n} <b>${k}대</b>`));
+  if(S.rigs.length){const rn={};S.rigs.forEach(r=>{const k=RIGS[r.kind].n;rn[k]=rn[k]||[0,0];rn[k][0]++;rn[k][1]+=r.kind==='layher'?0:(+r.len||0)});Object.entries(rn).forEach(([n,v])=>tl.push(`${n} <b>${v[0]}개</b>${v[1]?` (합 ${r1(v[1])}m)`:''}`))}
   $('#tally').innerHTML=tl.join('<br>');
   // 카메라
   S.cams.forEach((c,i)=>{tagTo('cam:'+i);
@@ -640,12 +718,16 @@ function resize(){const W=el.clientWidth,H=el.clientHeight;renderer.setSize(W,H)
 addEventListener('resize',resize);
 // 마우스: 살짝 누르면 고르기, 카메라 화면에서 끌면 방향 돌리기, 휠은 줌
 {const cv=renderer.domElement;let dn=null;
-  cv.addEventListener('pointerdown',e=>{dn={x:e.clientX,y:e.clientY,moved:false};if(view.startsWith('cam')&&!VIEW)cv.setPointerCapture(e.pointerId)});
+  cv.addEventListener('pointerdown',e=>{dn={x:e.clientX,y:e.clientY,moved:false};if(VIEW)return;if(view.startsWith('cam'))return cv.setPointerCapture(e.pointerId);
+    if(view==='seat'||armed)return;const t=pickAt(e.clientX,e.clientY);if(/^(cam|item|light|rig):/.test(t)){dn.drag=t;dn.py=tagY(t);controls.enabled=false;cv.setPointerCapture(e.pointerId)}});
   cv.addEventListener('pointermove',e=>{if(!dn)return;const dx=e.clientX-dn.x,dy=e.clientY-dn.y;if(Math.abs(dx)+Math.abs(dy)>4)dn.moved=true;
+    if(dn.drag){if(!dn.moved)return;const hp=floorHit(e.clientX,e.clientY,dn.py);if(hp){moveTag(dn.drag,hp);dn.dragged=true;if(!cv._raf)cv._raf=requestAnimationFrame(()=>{cv._raf=0;build()})}return}
     if(!dn.moved||VIEW||!view.startsWith('cam'))return;const i=+view.slice(3),c=S.cams[i];if(!c)return;
     const perPx=camFov(c)/$('#frame').clientWidth;c.pan=Math.round(((+c.pan||0)-dx*perPx)*10)/10;c.tilt=Math.round(((+c.tilt||0)+dy*perPx)*10)/10;dn.x=e.clientX;dn.y=e.clientY;dn.turned=true;
     const a=document.querySelector(`[data-p="cams.${i}.pan"]`),b=document.querySelector(`[data-p="cams.${i}.tilt"]`);if(a)a.value=c.pan;if(b)b.value=c.tilt;applyView()});
   cv.addEventListener('pointerup',e=>{const d=dn;dn=null;if(!d)return;if(d.turned)return build();
+    if(d.drag){controls.enabled=true;if(d.dragged){if(d.drag.startsWith('light:'))snapLight(S.lights[+d.drag.slice(6)]);panel();build()}return selectTag(d.drag)}
+    if(armed&&!d.moved){const hp=floorHit(e.clientX,e.clientY);const sp=armed;armed='';document.querySelectorAll('.pi.armed').forEach(x=>x.classList.remove('armed'));if(hp)addNew(sp,hp);return}
     if(!d.moved&&!view.startsWith('cam')&&view!=='seat')selectTag(pickAt(e.clientX,e.clientY))});
   cv.addEventListener('wheel',e=>{if(VIEW||!view.startsWith('cam'))return;e.preventDefault();const i=+view.slice(3),c=S.cams[i];if(!c)return;
     c.f=camF(c)*Math.exp(-e.deltaY*.0015);c.f=camF(c);c.shot='';const z=document.querySelector(`[data-zoom="${i}"]`);if(z)z.value=zoomPos(c);
@@ -662,8 +744,40 @@ addEventListener('resize',resize);
   panel();build();resize();refreshScenes();loadVenues();
 })();
 addEventListener('hashchange',()=>location.reload());
+// 조명·구조물 목록에서 끌어다 놓기 (한 번 누르면 '놓을 준비', 그다음 화면을 누르면 놓임)
+{let nd=null;
+  document.addEventListener('pointerdown',e=>{const it=e.target.closest&&e.target.closest('.pi');if(!it)return;e.preventDefault();nd={spec:it.dataset.new,el:it,x:e.clientX,y:e.clientY,ghost:null}});
+  document.addEventListener('pointermove',e=>{if(!nd)return;if(!nd.ghost&&Math.abs(e.clientX-nd.x)+Math.abs(e.clientY-nd.y)>5){nd.ghost=document.createElement('div');nd.ghost.id='ghost';nd.ghost.textContent=nd.el.textContent+' 놓기';document.body.appendChild(nd.ghost)}
+    if(nd.ghost){nd.ghost.style.left=e.clientX+'px';nd.ghost.style.top=e.clientY+'px'}});
+  document.addEventListener('pointerup',e=>{const d=nd;nd=null;if(!d)return;if(d.ghost){d.ghost.remove();const hp=floorHit(e.clientX,e.clientY);if(hp&&!view.startsWith('cam')&&view!=='seat')addNew(d.spec,hp);return}
+    document.querySelectorAll('.pi.armed').forEach(x=>x.classList.remove('armed'));if(armed===d.spec){armed='';return}armed=d.spec;d.el.classList.add('armed')});}
 (function loop(){requestAnimationFrame(loop);if(controls.enabled)controls.update();renderer.render(scene,camera)})();
 </script>
 <div id="brand"><b><i>W</i> PLACE</b><span>W플레이스는 우리미디어의 전용 플랫폼입니다.</span></div>
+<style>
+  /* 우군이 AI 공통 메뉴가 붙었을 때 (포털 로그인한 사내 모드에서만) */
+  body.has-wr-rail{display:flex}
+  body.has-wr-rail #app{flex:1;min-width:0}
+  @media(max-width:860px){body.has-wr-tabs{box-sizing:border-box}}
+</style>
+<script>
+// 우군이 AI 포털 공통 메뉴 — 포털에 로그인한 사내 모드에서만 왼쪽 메뉴·휴대폰 아래 탭을 붙인다 (보기 전용 공유 화면에는 안 붙임)
+if (!document.body.classList.contains('viewer')) fetch('/api/portal-shell').then(r => r.ok ? r.json() : {}).then(sh => {
+  if (!sh.portal || !sh.categories || document.body.classList.contains('viewer')) return;
+  const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = sh.portal_url + '/static/shell/rail.css?v=20261102c'; document.head.append(css);
+  const js = document.createElement('script'); js.src = sh.portal_url + '/static/shell/rail.js?v=20261103b';
+  js.onload = () => {
+    const rail = document.createElement('nav'); document.body.prepend(rail);
+    document.body.classList.add('has-wr-rail', 'has-wr-tabs');
+    const opt = { categories: sh.categories, current: 'pre', isAdmin: sh.is_admin, portalUrl: sh.portal_url,
+                  here: { id: 'pre', href: '/' }, links: sh.links };
+    window.WoogooniRail.render(rail, opt);
+    const tabs = document.createElement('nav'); document.body.append(tabs);
+    window.WoogooniRail.renderTabs(tabs, { ...opt, current: 'more' });
+    window.dispatchEvent(new Event('resize'));   // 3D 화면 크기 다시 맞추기
+  };
+  document.head.append(js);
+}).catch(() => {});
+</script>
 </body>
 </html>
